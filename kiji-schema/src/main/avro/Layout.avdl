@@ -158,6 +158,9 @@ protocol KijiTableLayoutRecords {
     /** Length of time in seconds to retain cells. */
     int ttl_seconds;
 
+    /** Block size, see http://hbase.apache.org/apidocs/org/apache/hadoop/hbase/HColumnDescriptor.html#BLOCKSIZE */
+    union { null, int } block_size = null;
+
     /** Data compression type. */
     CompressionType compression_type;
 
@@ -320,6 +323,12 @@ protocol KijiTableLayoutRecords {
   record TableLayoutDesc {
     /** Name of the table ([a-zA-Z0-9_]+). */
     string name;
+
+    /** Max file size of an hbase region. See http://hbase.apache.org/apidocs/org/apache/hadoop/hbase/HTableDescriptor.html#setMaxFileSize(long). */
+    union { null, long } max_filesize = null;
+
+    /** Maximum size of the hbase memstore. See http://hbase.apache.org/apidocs/org/apache/hadoop/hbase/HTableDescriptor.html#setMemStoreFlushSize(long) */
+    union { null, long } memstore_flushsize = null;
 
     /** User description of the table. */
     string description = "";
