@@ -50,6 +50,10 @@ public class HColumnDescriptorComparator implements Comparator<HColumnDescriptor
     if (inMemoryResult != 0) {
       return inMemoryResult;
     }
+    int blockSizeResult = Integer.valueOf(o1.getBlocksize()).compareTo(o2.getBlocksize());
+    if (blockSizeResult != 0) {
+      return blockSizeResult;
+    }
     // TODO: Add things like bloomfiltertype as necessary.
     return o1.getCompressionType().toString().compareTo(o2.getCompressionType().toString());
   }
