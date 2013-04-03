@@ -25,6 +25,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 
 import org.kiji.annotations.ApiAudience;
+import org.kiji.annotations.ApiStability;
 import org.kiji.schema.DecodedCell;
 import org.kiji.schema.InternalKijiError;
 import org.kiji.schema.KijiCellEncoder;
@@ -34,11 +35,10 @@ import org.kiji.schema.NoSuchColumnException;
 import org.kiji.schema.hbase.HBaseColumnName;
 import org.kiji.schema.impl.DefaultKijiCellEncoderFactory;
 import org.kiji.schema.impl.HBaseDataRequestAdapter;
+import org.kiji.schema.layout.CellSpec;
 import org.kiji.schema.layout.InvalidLayoutException;
 import org.kiji.schema.layout.KijiTableLayout;
-import org.kiji.schema.layout.impl.CellSpec;
 import org.kiji.schema.layout.impl.ColumnNameTranslator;
-
 
 /**
  * Applies a KijiRowFilter to various row-savvy objects.
@@ -47,6 +47,7 @@ import org.kiji.schema.layout.impl.ColumnNameTranslator;
  * comparisons, which does not play well with Avro records.
  */
 @ApiAudience.Framework
+@ApiStability.Evolving
 public final class KijiRowFilterApplicator {
   /** The row filter to be applied by this applicator. */
   private final KijiRowFilter mRowFilter;

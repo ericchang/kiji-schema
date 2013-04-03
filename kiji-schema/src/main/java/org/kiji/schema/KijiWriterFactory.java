@@ -22,6 +22,7 @@ package org.kiji.schema;
 import java.io.IOException;
 
 import org.kiji.annotations.ApiAudience;
+import org.kiji.annotations.ApiStability;
 
 /**
  * Interface for table writer factories.
@@ -29,6 +30,7 @@ import org.kiji.annotations.ApiAudience;
  * <p> Use <code>KijiTable.getWriterFactory()</code> to get a writer.
  */
 @ApiAudience.Public
+@ApiStability.Evolving
 public interface KijiWriterFactory {
 
   /**
@@ -48,4 +50,13 @@ public interface KijiWriterFactory {
    * @throws IOException in case of an error.
    */
   AtomicKijiPutter openAtomicPutter() throws IOException;
+
+  /**
+   * Opens a new KijiBufferedWriter for the KijiTable associated with this writer factory.
+   * The caller of this method is responsible for closing the writer.
+   *
+   * @return A new KijiBufferedWriter.
+   * @throws IOException in case of an error.
+   */
+  KijiBufferedWriter openBufferedWriter() throws IOException;
 }

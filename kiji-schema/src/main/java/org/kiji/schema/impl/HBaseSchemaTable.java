@@ -139,24 +139,6 @@ public class HBaseSchemaTable implements KijiSchemaTable {
   private String mConstructorStack = "";
 
   /**
-   * Creates an HTable handle to the schema V5 table.
-   *
-   * @param kijiURI the KijiURI.
-   * @param conf the Hadoop configuration.
-   * @param factory HTableInterface factory.
-   * @return a new interface for the table storing the schemas up until data layout v5.
-   * @throws IOException on I/O error.
-   */
-  public static HTableInterface newSchemaV5Table(
-      KijiURI kijiURI,
-      Configuration conf,
-      HTableInterfaceFactory factory)
-      throws IOException {
-    return factory.create(conf,
-        KijiManagedHBaseTableName.getSchemaV5TableName(kijiURI.getInstance()).toString());
-  }
-
-  /**
    * Creates an HTable handle to the schema hash table.
    *
    * @param kijiURI the KijiURI.
@@ -470,16 +452,9 @@ public class HBaseSchemaTable implements KijiSchemaTable {
     return (entry == null) ? null : entry.getSchema();
   }
 
-  /**
-   * Looks up a schema entry by ID, first in-memory, or then in-table.
-   *
-   * Updates the in-memory maps if the schema entry is found in the tables.
-   *
-   * @param schemaId Schema ID
-   * @return Corresponding SchemaEntry, or null if the schema ID does not exist.
-   * @throws IOException on I/O error.
-   */
-  private synchronized SchemaEntry getSchemaEntry(long schemaId) throws IOException {
+  /** {@inheritDoc} */
+  @Override
+  public synchronized SchemaEntry getSchemaEntry(long schemaId) throws IOException {
     Preconditions.checkState(mIsOpen, "Schema table is closed");
 
     final SchemaEntry existingEntry = mSchemaIdMap.get(schemaId);
@@ -503,16 +478,9 @@ public class HBaseSchemaTable implements KijiSchemaTable {
     return (entry == null) ? null : entry.getSchema();
   }
 
-  /**
-   * Looks up a schema entry by hash, first in-memory, or then in-table.
-   *
-   * Updates the in-memory maps if the schema entry is found in the tables.
-   *
-   * @param schemaHash Schema hash
-   * @return Corresponding SchemaEntry, or null if the schema hash does not exist.
-   * @throws IOException on I/O error.
-   */
-  private synchronized SchemaEntry getSchemaEntry(BytesKey schemaHash) throws IOException {
+  /** {@inheritDoc} */
+  @Override
+  public synchronized SchemaEntry getSchemaEntry(BytesKey schemaHash) throws IOException {
     Preconditions.checkState(mIsOpen, "Schema table is closed");
 
     final SchemaEntry existingEntry = mSchemaHashMap.get(schemaHash);
@@ -529,6 +497,12 @@ public class HBaseSchemaTable implements KijiSchemaTable {
     final SchemaEntry entry = storeInMemory(avroEntry);
     Preconditions.checkState(schemaHash.equals(entry.getHash()));
     return entry;
+  }
+
+  /** {@inheritDoc} */
+  @Override
+  public SchemaEntry getSchemaEntry(Schema schema) throws IOException {
+    return getSchemaEntry(getSchemaHash(schema));
   }
 
   /**
@@ -711,10 +685,6 @@ public class HBaseSchemaTable implements KijiSchemaTable {
     final String idTableName =
         KijiManagedHBaseTableName.getSchemaIdTableName(kijiURI.getInstance()).toString();
     deleteTable(admin, idTableName);
-
-    final String v5TableName =
-        KijiManagedHBaseTableName.getSchemaV5TableName(kijiURI.getInstance()).toString();
-    deleteTable(admin, v5TableName);
   }
 
   /** {@inheritDoc} */

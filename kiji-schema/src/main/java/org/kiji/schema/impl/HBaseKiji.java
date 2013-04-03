@@ -67,7 +67,7 @@ import org.kiji.schema.util.ZooKeeperLockFactory;
  * single HBase cluster.  This class represents a single one of those
  * instances.
  */
-@ApiAudience.Public
+@ApiAudience.Private
 public final class HBaseKiji implements Kiji {
   private static final Logger LOG = LoggerFactory.getLogger(HBaseKiji.class);
   private static final Logger CLEANUP_LOG =
@@ -498,6 +498,22 @@ public final class HBaseKiji implements Kiji {
       } else {
         LOG.debug("Disabling HBase table");
         getHBaseAdmin().disableTable(hbaseTableName.toString());
+      }
+
+      if (dryRun) {
+        if (newTableDescriptor.getMaxFileSize() != currentTableDescriptor.getMaxFileSize()) {
+          printStream.printf("  Changing max_filesize from %d to %d: %n",
+              currentTableDescriptor.getMaxFileSize(),
+              newTableDescriptor.getMaxFileSize());
+        }
+        if (newTableDescriptor.getMaxFileSize() != currentTableDescriptor.getMaxFileSize()) {
+          printStream.printf("  Changing memstore_flushsize from %d to %d: %n",
+              currentTableDescriptor.getMemStoreFlushSize(),
+              newTableDescriptor.getMemStoreFlushSize());
+          }
+      } else {
+        LOG.debug("Modifying table descriptor");
+        getHBaseAdmin().modifyTable(hbaseTableName.toBytes(), newTableDescriptor);
       }
 
       for (HColumnDescriptor newColumnDescriptor : newTableDescriptor.getFamilies()) {

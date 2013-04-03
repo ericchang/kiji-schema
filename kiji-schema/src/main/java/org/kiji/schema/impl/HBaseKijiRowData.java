@@ -45,6 +45,7 @@ import org.kiji.schema.KijiCell;
 import org.kiji.schema.KijiCellDecoder;
 import org.kiji.schema.KijiCellDecoderFactory;
 import org.kiji.schema.KijiColumnName;
+import org.kiji.schema.KijiColumnPagingNotEnabledException;
 import org.kiji.schema.KijiDataRequest;
 import org.kiji.schema.KijiPager;
 import org.kiji.schema.KijiRowData;
@@ -52,8 +53,8 @@ import org.kiji.schema.KijiSchemaTable;
 import org.kiji.schema.NoSuchColumnException;
 import org.kiji.schema.SpecificCellDecoderFactory;
 import org.kiji.schema.hbase.HBaseColumnName;
+import org.kiji.schema.layout.CellSpec;
 import org.kiji.schema.layout.KijiTableLayout;
-import org.kiji.schema.layout.impl.CellSpec;
 import org.kiji.schema.layout.impl.ColumnNameTranslator;
 import org.kiji.schema.util.TimestampComparator;
 

@@ -26,8 +26,8 @@ import java.util.NavigableSet;
 import org.apache.avro.Schema;
 
 import org.kiji.annotations.ApiAudience;
+import org.kiji.annotations.ApiStability;
 import org.kiji.annotations.Inheritance;
-import org.kiji.schema.impl.KijiColumnPagingNotEnabledException;
 
 /**
  * KijiRowData provides a way for applications to access data read from a Kiji table.
@@ -84,12 +84,15 @@ import org.kiji.schema.impl.KijiColumnPagingNotEnabledException;
  * <p>
  *   Rows in Kiji tables may contain large amounts of data. In some cases, this is caused by
  *   storing many versions of a cell with different timestamps in a row. This can become a
- *   problem when the size of a row/cell exceeds the amount of RAM available. To deal with
- *   this, {@link KijiPager}s can be used. See the documentation for {@link KijiPager} for
- *   more information.
+ *   problem when the size of a row/cell exceeds the amount of RAM available.
+ *   To deal with large rows, you may use paging through a {@link KijiPager}.
+ *   When paging is enabled on a column, cells from that column may only be accessed through
+ *   {@link #getPager(String)} and {@link #getPager(String, String)}.
+ *   See the documentation for {@link KijiPager} for more information.
  * </p>
  */
 @ApiAudience.Public
+@ApiStability.Stable
 @Inheritance.Sealed
 public interface KijiRowData {
   /**

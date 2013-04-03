@@ -48,9 +48,9 @@ import org.kiji.schema.KijiTableWriter;
 import org.kiji.schema.NoSuchColumnException;
 import org.kiji.schema.avro.SchemaType;
 import org.kiji.schema.hbase.HBaseColumnName;
+import org.kiji.schema.layout.CellSpec;
 import org.kiji.schema.layout.KijiTableLayout.LocalityGroupLayout.FamilyLayout;
 import org.kiji.schema.layout.KijiTableLayout.LocalityGroupLayout.FamilyLayout.ColumnLayout;
-import org.kiji.schema.layout.impl.CellSpec;
 import org.kiji.schema.layout.impl.ColumnNameTranslator;
 import org.kiji.schema.util.ResourceUtils;
 
@@ -201,6 +201,7 @@ public final class HBaseKijiTableWriter implements KijiTableWriter {
     // Send the delete to the HBase HTable.
     mTable.getHTable().delete(delete);
   }
+
   /**
    * Deletes all cells from a group-type family with a timestamp less than or equal to a
    * specified timestamp.

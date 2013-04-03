@@ -19,11 +19,11 @@
 
 package org.kiji.schema;
 
-import java.io.Closeable;
 import java.io.IOException;
 import java.util.List;
 
 import org.kiji.annotations.ApiAudience;
+import org.kiji.annotations.ApiStability;
 import org.kiji.annotations.Inheritance;
 import org.kiji.schema.layout.KijiTableLayout;
 import org.kiji.schema.util.ReferenceCountable;
@@ -45,7 +45,7 @@ import org.kiji.schema.util.ReferenceCountable;
  *   <code>
  *     final KijiTable table = myKiji.openTable("tableName");
  *     // Do some magic
- *     table.close();
+ *     table.release();
  *   </code>
  * </pre>
  *
@@ -75,7 +75,7 @@ import org.kiji.schema.util.ReferenceCountable;
  *     // Close open connections.
  *     reader.close();
  *     writer.close();
- *     table.close();
+ *     table.release();
  *   </code>
  * </pre>
  *
@@ -85,8 +85,9 @@ import org.kiji.schema.util.ReferenceCountable;
  * @see Kiji for more information about opening a KijiTable instance.
  */
 @ApiAudience.Public
+@ApiStability.Stable
 @Inheritance.Sealed
-public interface KijiTable extends ReferenceCountable<KijiTable>, Closeable {
+public interface KijiTable extends ReferenceCountable<KijiTable> {
   /** @return the Kiji instance this table belongs to. */
   Kiji getKiji();
 
@@ -119,18 +120,30 @@ public interface KijiTable extends ReferenceCountable<KijiTable>, Closeable {
   EntityId getEntityId(Object... kijiRowKey);
 
   /**
-   * Opens a KijiTableReader for this table. The caller of this method is responsible
-   * for closing the returned reader.
+   * Opens a KijiTableReader for this table.
+   *
+   * <p> The caller of this method is responsible for closing the returned reader.
+   * <p> The reader returned by this method does not provide any isolation guarantee.
+   *     In particular, you should assume that the underlying resources (connections, buffers, etc)
+   *     are used concurrently for other purposes.
    *
    * @return A KijiTableReader for this table.
+   * @throws KijiIOException Future implementations may throw unchecked KijiIOException.
    */
   KijiTableReader openTableReader();
 
   /**
-   * Opens a KijiTableWriter for this table. The caller of this method is responsible
-   * for closing the returned writer.
+   * Opens a KijiTableWriter for this table.
+   *
+   * <p> The caller of this method is responsible for closing the returned writer.
+   * <p> The writer returned by this method does not provide any isolation guarantee.
+   *     In particular, you should assume that the underlying resources (connections, buffers, etc)
+   *     are used concurrently for other purposes.
+   * <p> If you have specific resource requirements, such as buffering, timeouts, dedicated
+   *     connection, etc, use {@link #getWriterFactory()}.
    *
    * @return A KijiTableWriter for this table.
+   * @throws KijiIOException Future implementations may throw unchecked KijiIOException.
    */
   KijiTableWriter openTableWriter();
 
@@ -149,13 +162,4 @@ public interface KijiTable extends ReferenceCountable<KijiTable>, Closeable {
    * @throws IOException If there is an error retrieving the regions of this table.
    */
   List<KijiRegion> getRegions() throws IOException;
-
-  /**
-   * Closes any open resources being used by this KijiTable.
-   *
-   * @deprecated Use {@link #release()} instead.
-   * @throws IOException on I/O error.
-   */
-  @Deprecated
-  void close() throws IOException;
 }

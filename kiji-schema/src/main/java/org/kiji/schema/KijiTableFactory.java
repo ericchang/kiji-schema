@@ -22,16 +22,18 @@ package org.kiji.schema;
 import java.io.IOException;
 
 import org.kiji.annotations.ApiAudience;
+import org.kiji.annotations.ApiStability;
 import org.kiji.annotations.Inheritance;
 
 /** Factory for KijiTable instances. */
 @ApiAudience.Public
+@ApiStability.Stable
 @Inheritance.Sealed
 public interface KijiTableFactory {
   /**
    * Opens a KijiTable by name.
    *
-   * <p>Clients must take care to close the KijiTable instance when finished.</p>
+   * <p>Clients must take care to release the KijiTable instance when finished.</p>
    *
    * @param tableName Name of the table to open.
    * @return the opened Kiji table.

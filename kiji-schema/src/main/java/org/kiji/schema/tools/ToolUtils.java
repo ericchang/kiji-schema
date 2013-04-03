@@ -43,6 +43,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.kiji.annotations.ApiAudience;
+import org.kiji.annotations.ApiStability;
 import org.kiji.schema.EntityId;
 import org.kiji.schema.EntityIdFactory;
 import org.kiji.schema.KijiCell;
@@ -63,6 +64,7 @@ import org.kiji.schema.util.ByteArrayFormatter;
  * Utility class providing static methods used by command-line tools.
  */
 @ApiAudience.Framework
+@ApiStability.Evolving
 public final class ToolUtils {
 
   private static final Logger LOG = LoggerFactory.getLogger(ToolUtils.class);
@@ -546,7 +548,7 @@ public final class ToolUtils {
   /**
    * Formats an entity ID for a command-line user.
    *
-   * @deprecated use {@link EntityIdFactory#formatEntityId(EntityId)} instead.
+   * @deprecated use {@link EntityId#toShellString()} instead.
    * @param eid Entity ID to format.
    * @return the formatted entity ID as a String to print on the console.
    */

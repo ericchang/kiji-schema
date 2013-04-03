@@ -46,6 +46,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.kiji.annotations.ApiAudience;
+import org.kiji.annotations.ApiStability;
 import org.kiji.schema.KijiColumnName;
 import org.kiji.schema.NoSuchColumnException;
 import org.kiji.schema.avro.CellSchema;
@@ -61,7 +62,6 @@ import org.kiji.schema.avro.SchemaType;
 import org.kiji.schema.avro.TableLayoutDesc;
 import org.kiji.schema.layout.KijiTableLayout.LocalityGroupLayout.FamilyLayout;
 import org.kiji.schema.layout.KijiTableLayout.LocalityGroupLayout.FamilyLayout.ColumnLayout;
-import org.kiji.schema.layout.impl.CellSpec;
 import org.kiji.schema.layout.impl.ColumnId;
 import org.kiji.schema.util.FromJson;
 import org.kiji.schema.util.Hasher;
@@ -254,6 +254,7 @@ import org.kiji.schema.util.ToJson;
  * and then re-creating it as a new empty column).
  */
 @ApiAudience.Public
+@ApiStability.Evolving
 public final class KijiTableLayout {
   private static final Logger LOG = LoggerFactory.getLogger(KijiTableLayout.class);
 

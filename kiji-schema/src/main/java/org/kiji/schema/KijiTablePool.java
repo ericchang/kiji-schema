@@ -34,6 +34,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.kiji.annotations.ApiAudience;
+import org.kiji.annotations.ApiStability;
 import org.kiji.schema.layout.KijiTableLayout;
 import org.kiji.schema.util.Clock;
 import org.kiji.schema.util.ResourceUtils;
@@ -73,6 +74,7 @@ import org.kiji.schema.util.ResourceUtils;
  * </p>
  */
 @ApiAudience.Public
+@ApiStability.Evolving
 public final class KijiTablePool implements Closeable {
   private static final Logger LOG = LoggerFactory.getLogger(KijiTablePool.class);
   private static final Logger CLEANUP_LOG =
@@ -256,9 +258,8 @@ public final class KijiTablePool implements Closeable {
   }
 
   /**
-   * Gets a previously opened table from the pool, or open a new connection.
-   * Clients should not call close() on the returned table. Instead, they should release the
-   * table back to the pool when finished by passing it in call to release().
+   * Gets a previously opened table from the pool, or open a new connection. Clients should release
+   * the table back to the pool when finished by passing it in call to release().
    *
    * @param name The name of the Kiji table.
    * @return An opened Kiji table.
@@ -297,7 +298,7 @@ public final class KijiTablePool implements Closeable {
   }
 
   /**
-   * Closes the tables in the pool.
+   * Releases the tables in the pool.
    *
    * @throws IOException If there is an error closing the pool.
    */
@@ -470,7 +471,6 @@ public final class KijiTablePool implements Closeable {
 
     /**
      * Constructor.
-     *
      * @param table The table connection to wrap.
      * @param pool The pool that this Connection is associated with.
      */
@@ -490,13 +490,6 @@ public final class KijiTablePool implements Closeable {
     }
 
     // Unwrapped methods to manage the lifecycle of KijiTables obtained from a KijiTablePool.
-
-    /** {@inheritDoc} */
-    @Override
-    @Deprecated
-    public void close() throws IOException {
-      throw new UnsupportedOperationException("Cannot close KijiTable managed by KijiTablePool.");
-    }
 
     /**
      * Allows clients to express interest in retaining KijiTables that are retrieved from the
