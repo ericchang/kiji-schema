@@ -500,6 +500,22 @@ public final class HBaseKiji implements Kiji {
         getHBaseAdmin().disableTable(hbaseTableName.toString());
       }
 
+      if (dryRun) {
+        if (newTableDescriptor.getMaxFileSize() != currentTableDescriptor.getMaxFileSize()) {
+          printStream.printf("  Changing max_filesize from %d to %d: %n",
+              currentTableDescriptor.getMaxFileSize(),
+              newTableDescriptor.getMaxFileSize());
+        }
+        if (newTableDescriptor.getMaxFileSize() != currentTableDescriptor.getMaxFileSize()) {
+          printStream.printf("  Changing memstore_flushsize from %d to %d: %n",
+              currentTableDescriptor.getMemStoreFlushSize(),
+              newTableDescriptor.getMemStoreFlushSize());
+          }
+      } else {
+        LOG.debug("Modifying table descriptor");
+        getHBaseAdmin().modifyTable(hbaseTableName.toBytes(), newTableDescriptor);
+      }
+
       for (HColumnDescriptor newColumnDescriptor : newTableDescriptor.getFamilies()) {
         final String columnName = Bytes.toString(newColumnDescriptor.getName());
         final ColumnId columnId = ColumnId.fromString(columnName);
