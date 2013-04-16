@@ -21,24 +21,56 @@ package org.kiji.schema.filter;
 
 import java.util.List;
 
+import org.codehaus.jackson.JsonNode;
+
 import org.kiji.annotations.ApiAudience;
 import org.kiji.annotations.ApiStability;
 
 /**
- * A KijiRowFilter for a disjunction (OR operator) of other filters.
+ * Combines a list of row filters using a logical OR operator.
  *
- * <p>If a row <i>R</i> is accepted by filter <i>A</i> or <i>B</i>, <i>R</i>
- * will be accepted by OrRowFilter(<i>A</i>, <i>B</i>).</p>
+ * <p> Column filters are applied in order and lazily. </p>
  */
 @ApiAudience.Public
 @ApiStability.Evolving
 public final class OrRowFilter extends OperatorRowFilter {
   /**
-   * Creates a new <code>OrRowFilter</code> instance.
+   * Creates a row filter that combines a list of row filters with an OR operator.
    *
-   * @param filters The filters that should be used in the filter conjunction.
+   * @param filters Row filters to combine with a logical OR.
+   *     Nulls are filtered out.
+   * @deprecated Use {@link Filters#or(KijiRowFilter...)}.
    */
+  @Deprecated
   public OrRowFilter(List<? extends KijiRowFilter> filters) {
+    super(OperatorRowFilter.Operator.OR, filters.toArray(new KijiRowFilter[filters.size()]));
+  }
+
+  /**
+   * Creates a row filter that combines a list of row filters with an OR operator.
+   *
+   * @param filters Row filters to combine with a logical OR.
+   *     Nulls are filtered out.
+   * @deprecated Use {@link Filters#or(KijiRowFilter...)}.
+   */
+  @Deprecated
+  public OrRowFilter(KijiRowFilter... filters) {
     super(OperatorRowFilter.Operator.OR, filters);
+  }
+
+  /** {@inheritDoc} */
+  @Override
+  protected Class<? extends KijiRowFilterDeserializer> getDeserializerClass() {
+    return OrRowFilterDeserializer.class;
+  }
+
+  /** Deserializes {@code OrRowFilter}. */
+  public static final class OrRowFilterDeserializer implements KijiRowFilterDeserializer {
+    /** {@inheritDoc} */
+    @Override
+    public KijiRowFilter createFromJson(JsonNode root) {
+      final List<KijiRowFilter> filters = OperatorRowFilter.parseFilterList(root);
+      return new OrRowFilter(filters);
+    }
   }
 }

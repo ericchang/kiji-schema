@@ -77,10 +77,7 @@ public final class DecodedCell<T> {
       return false;
     }
     final DecodedCell<?> other = (DecodedCell<?>) obj;
-
-    final Schema schema = getWriterSchema();
-    final Schema otherSchema = other.getWriterSchema();
-    if ((schema != otherSchema) || !getWriterSchema().equals(other.getWriterSchema())) {
+    if (!Objects.equal(this.getWriterSchema(), other.getWriterSchema())) {
       return false;
     }
 
@@ -94,14 +91,10 @@ public final class DecodedCell<T> {
     return data.equals(otherData);
   }
 
-  /**
-   * This operation is not supported.
-   *
-   * @return Nothing. Does not return since this operation is unsupported.
-   */
+  /** {@inheritDoc} */
   @Override
   public int hashCode() {
-    throw new UnsupportedOperationException();
+    return Objects.hashCode(getWriterSchema(), getData());
   }
 
   /** {@inheritDoc} */

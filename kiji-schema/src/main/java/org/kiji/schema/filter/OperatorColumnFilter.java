@@ -1,5 +1,5 @@
 /**
- * (c) Copyright 2012 WibiData, Inc.
+ * (c) Copyright 2013 WibiData, Inc.
  *
  * See the NOTICE file distributed with this work for additional
  * information regarding copyright ownership.
@@ -30,32 +30,24 @@ import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
 
-import org.codehaus.jackson.JsonNode;
-import org.codehaus.jackson.node.ArrayNode;
-import org.codehaus.jackson.node.JsonNodeFactory;
-import org.codehaus.jackson.node.ObjectNode;
-
 import org.kiji.annotations.ApiAudience;
-import org.kiji.schema.KijiDataRequest;
+import org.kiji.schema.KijiColumnName;
 
 /**
- * Row filter that combines a list of row filters using some boolean logical operator.
+ * Column filter that combines a list of columns filter using some boolean logical operator.
  *
- * <p> Users should use {@link AndRowFilter} or {@link OrRowFilter} instead of this class. </p>.
+ * <p> Users should use {@link AndColumnFilter} or {@link OrColumnFilter} instead of this class.
+ * </p>.
  */
 @ApiAudience.Private
-abstract class OperatorRowFilter extends KijiRowFilter {
-  /** The name of the node holding the operator. */
-  private static final String OPERATOR_NODE = "operator";
+class OperatorColumnFilter extends KijiColumnFilter {
+  private static final long serialVersionUID = 1L;
 
-  /** The name of the node holding the filters. */
-  private static final String FILTERS_NODE = "filters";
-
-  /** The operator to use on the filter operands. */
+  /** Logical operator to use on the filter operands. */
   private final Operator mOperator;
 
-  /** The filters that should be used in the operands. May contain nulls. */
-  private final KijiRowFilter[] mFilters;
+  /** Column filters to combine. May contain nulls. */
+  private final KijiColumnFilter[] mFilters;
 
   /** Available logical operators. */
   public static enum Operator {
@@ -90,7 +82,7 @@ abstract class OperatorRowFilter extends KijiRowFilter {
    * @param filters The filters that should be used in the filter conjunction.
    *     Nulls are filtered out.
    */
-  OperatorRowFilter(Operator operator, KijiRowFilter... filters) {
+  OperatorColumnFilter(Operator operator, KijiColumnFilter[] filters) {
     Preconditions.checkArgument(filters.length > 0, "filters must be non-empty");
     mOperator = operator;
     mFilters = filters;
@@ -98,23 +90,11 @@ abstract class OperatorRowFilter extends KijiRowFilter {
 
   /** {@inheritDoc} */
   @Override
-  public KijiDataRequest getDataRequest() {
-    KijiDataRequest dataRequest = KijiDataRequest.builder().build();
-    for (KijiRowFilter filter : mFilters) {
-      if (filter != null) {
-        dataRequest = dataRequest.merge(filter.getDataRequest());
-      }
-    }
-    return dataRequest;
-  }
-
-  /** {@inheritDoc} */
-  @Override
-  public Filter toHBaseFilter(Context context) throws IOException {
+  public Filter toHBaseFilter(KijiColumnName kijiColumnName, Context context) throws IOException {
     final List<Filter> hbaseFilters = Lists.newArrayList();
-    for (KijiRowFilter filter : mFilters) {
+    for (KijiColumnFilter filter : mFilters) {
       if (filter != null) {
-        hbaseFilters.add(filter.toHBaseFilter(context));
+        hbaseFilters.add(filter.toHBaseFilter(kijiColumnName, context));
       }
     }
     return new FilterList(mOperator.getFilterListOp(), hbaseFilters);
@@ -122,11 +102,11 @@ abstract class OperatorRowFilter extends KijiRowFilter {
 
   /** {@inheritDoc} */
   @Override
-  public boolean equals(Object object) {
-    if ((null == object) || (object.getClass() != getClass())) {
+  public boolean equals(Object other) {
+    if ((null == other) || (other.getClass() != getClass())) {
       return false;
     }
-    final OperatorRowFilter that = (OperatorRowFilter) object;
+    final OperatorColumnFilter that = (OperatorColumnFilter) other;
     return Objects.equal(this.mOperator, that.mOperator)
         && Arrays.equals(this.mFilters, that.mFilters);
   }
@@ -144,40 +124,5 @@ abstract class OperatorRowFilter extends KijiRowFilter {
         .add("operator", mOperator)
         .add("filters", mFilters)
         .toString();
-  }
-
-  /** {@inheritDoc} */
-  @Override
-  protected JsonNode toJsonNode() {
-    final ObjectNode root = JsonNodeFactory.instance.objectNode();
-    root.put(OPERATOR_NODE, mOperator.name());
-    final ArrayNode filters = root.arrayNode();
-    for (KijiRowFilter filter : mFilters) {
-      if (filter != null) {
-        filters.add(filter.toJson());
-      }
-    }
-    root.put(FILTERS_NODE, filters);
-    return root;
-  }
-
-  /**
-   * Deserializes the filters that are internal to this filter.
-   *
-   * @param root The {@code JsonNode} that holds the internal fields for this
-   *        filter
-   * @return A list of the filters that are internal to this filter
-   */
-  protected static List<KijiRowFilter> parseFilterList(JsonNode root) {
-    final JsonNode filtersNode = root.path(FILTERS_NODE);
-    Preconditions.checkArgument(filtersNode.isArray(),
-        "Node 'filters' is not an array: %s", filtersNode);
-    final List<KijiRowFilter> filters = Lists.newArrayList();
-    for (JsonNode filterNode : filtersNode) {
-      Preconditions.checkArgument(filterNode.isObject(),
-          "filter node is not an object: %s", filterNode);
-      filters.add(KijiRowFilter.toFilter(filterNode));
-    }
-    return filters;
   }
 }

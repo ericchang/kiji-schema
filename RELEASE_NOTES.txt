@@ -2,7 +2,19 @@
 
                               Kiji Schema Release Notes
 
+Version 1.0.2
+  * SCHEMA-314. Row filters constructors are being replaced with
+      factory methods such Filters.and(...) and Filters.or(...).
+  * SCHEMA-303. Allows proper serialization of row filters.
+      Contributed by Jeff Kolesky (jeff.kolesky@gmail.com).
+
+Version 1.0.1
+  * SCHEMA-254. Adds cellList methods to KijiRowData.
+  * SCHEMA-296. Adds hashCode and equals methods for Filters.
+
 Version 1.0.0
+  * SCHEMA-227. Fix get/scan behavior on tables with no families.
+  * SCHEMA-284. Fix usage doc string for kiji scan --start-row/limit-row flags.
   * SCHEMA-37. Adds stability annotations to all classes.
   * SCHEMA-280. Removes deprecated close() method from KijiTable.  Use
       table.release().
