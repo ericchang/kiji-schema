@@ -21,7 +21,7 @@
 
   <groupId>org.kiji.schema</groupId>
   <artifactId>kiji-schema-root</artifactId>
-  <version>1.0.2-SNAPSHOT</version>
+  <version>1.0.2-internal-poc4</version>
   <packaging>pom</packaging>
 
   <parent>
@@ -79,6 +79,17 @@
             </dependency>
           </dependencies>
         </plugin>
+        
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-javadoc-plugin</artifactId>
+        </plugin>
+
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-jar-plugin</artifactId>
+        </plugin>
+
       </plugins>
     </pluginManagement>
   </build>

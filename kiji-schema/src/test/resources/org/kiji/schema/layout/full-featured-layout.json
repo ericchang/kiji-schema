@@ -18,6 +18,8 @@
  */
 {
   name : "user",
+  max_filesize : 10737418240,
+  memstore_flushsize : 268435456,
   keys_format : {
     encoding : "HASH",
     hash_type : "MD5",
@@ -28,6 +30,7 @@
     description : "Default data stored forever on disk.",
     in_memory : false,
     max_versions : 2147483647,
+    block_size : 64,
     ttl_seconds : 2147483647,
     compression_type : "GZ",
     families : [ {

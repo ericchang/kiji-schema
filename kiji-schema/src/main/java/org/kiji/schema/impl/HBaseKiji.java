@@ -22,10 +22,12 @@ package org.kiji.schema.impl;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.base.Preconditions;
+import com.google.common.util.concurrent.Uninterruptibles;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
@@ -33,6 +35,7 @@ import org.apache.hadoop.hbase.TableExistsException;
 import org.apache.hadoop.hbase.TableNotFoundException;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -463,8 +466,9 @@ public final class HBaseKiji implements Kiji {
     final KijiManagedHBaseTableName hbaseTableName =
         KijiManagedHBaseTableName.getKijiTableName(mURI.getInstance(), tableName);
     HTableDescriptor currentTableDescriptor = null;
+    byte[] tableNameAsBytes = hbaseTableName.toBytes();
     try {
-      currentTableDescriptor = getHBaseAdmin().getTableDescriptor(hbaseTableName.toBytes());
+      currentTableDescriptor = getHBaseAdmin().getTableDescriptor(tableNameAsBytes);
     } catch (TableNotFoundException tnfe) {
       if (!dryRun) {
         throw tnfe; // Not in dry-run mode; table needs to exist. Rethrow exception.
@@ -498,6 +502,29 @@ public final class HBaseKiji implements Kiji {
       } else {
         LOG.debug("Disabling HBase table");
         getHBaseAdmin().disableTable(hbaseTableName.toString());
+      }
+
+      if (dryRun) {
+        if (newTableDescriptor.getMaxFileSize() != currentTableDescriptor.getMaxFileSize()) {
+          printStream.printf("  Changing max_filesize from %d to %d: %n",
+              currentTableDescriptor.getMaxFileSize(),
+              newTableDescriptor.getMaxFileSize());
+        }
+        if (newTableDescriptor.getMaxFileSize() != currentTableDescriptor.getMaxFileSize()) {
+          printStream.printf("  Changing memstore_flushsize from %d to %d: %n",
+              currentTableDescriptor.getMemStoreFlushSize(),
+              newTableDescriptor.getMemStoreFlushSize());
+          }
+      } else {
+        LOG.debug("Modifying table descriptor");
+        getHBaseAdmin().modifyTable(tableNameAsBytes, newTableDescriptor);
+      }
+
+      LOG.debug("Waiting for table modification to complete...");
+      Pair<Integer, Integer> status = getHBaseAdmin().getAlterStatus(tableNameAsBytes);
+      while (status.getFirst() > 0) {
+        Uninterruptibles.sleepUninterruptibly(1, TimeUnit.SECONDS);
+        status = getHBaseAdmin().getAlterStatus(tableNameAsBytes);
       }
 
       for (HColumnDescriptor newColumnDescriptor : newTableDescriptor.getFamilies()) {

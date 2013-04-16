@@ -23,6 +23,7 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 
 import org.kiji.annotations.ApiAudience;
+import org.kiji.schema.avro.TableLayoutDesc;
 import org.kiji.schema.hbase.KijiManagedHBaseTableName;
 import org.kiji.schema.layout.KijiTableLayout;
 import org.kiji.schema.layout.KijiTableLayout.LocalityGroupLayout;
@@ -55,6 +56,14 @@ public final class HTableSchemaTranslator {
     final KijiManagedHBaseTableName hbaseTableName =
         KijiManagedHBaseTableName.getKijiTableName(kijiInstanceName, tableName);
     final HTableDescriptor tableDescriptor = new HTableDescriptor(hbaseTableName.toString());
+      TableLayoutDesc tableLayoutDesc = tableLayout.getDesc();
+
+    if (tableLayoutDesc.getMaxFilesize() != null) {
+        tableDescriptor.setMaxFileSize(tableLayoutDesc.getMaxFilesize());
+    }
+    if (tableLayoutDesc.getMemstoreFlushsize() != null) {
+        tableDescriptor.setMemStoreFlushSize(tableLayoutDesc.getMemstoreFlushsize());
+    }
 
     // Add the columns.
     for (LocalityGroupLayout localityGroup : tableLayout.getLocalityGroupMap().values()) {
@@ -77,7 +86,10 @@ public final class HTableSchemaTranslator {
         localityGroup.getDesc().getCompressionType().toString(),
         localityGroup.getDesc().getInMemory(),
         true,  // block cache
+        localityGroup.getDesc().getBlockSize() != null ? localityGroup.getDesc().getBlockSize()
+                : HColumnDescriptor.DEFAULT_BLOCKSIZE,
         localityGroup.getDesc().getTtlSeconds(),
-        HColumnDescriptor.DEFAULT_BLOOMFILTER);
+        HColumnDescriptor.DEFAULT_BLOOMFILTER,
+        HColumnDescriptor.DEFAULT_REPLICATION_SCOPE);
   }
 }
