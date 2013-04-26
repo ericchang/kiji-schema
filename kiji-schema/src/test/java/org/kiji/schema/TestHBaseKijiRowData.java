@@ -31,9 +31,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 
+import com.google.common.collect.Lists;
 import org.apache.avro.Schema;
+import org.apache.avro.Schema.Field;
+import org.apache.avro.generic.GenericData;
+import org.apache.avro.generic.GenericRecordBuilder;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.junit.Before;
@@ -41,6 +44,7 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.kiji.schema.KijiDataRequestBuilder.ColumnsDef;
 import org.kiji.schema.avro.CellSchema;
 import org.kiji.schema.avro.Node;
 import org.kiji.schema.avro.SchemaStorage;
@@ -524,71 +528,6 @@ public class TestHBaseKijiRowData extends KijiClientTest {
   }
 
   @Test
-  public void testMergePut() throws IOException {
-    List<KeyValue> kvs = new ArrayList<KeyValue>();
-    EntityId row0 = mEntityIdFactory.getEntityId("row0");
-    byte[] hbaseRowKey = row0.getHBaseRowKey();
-    kvs.add(new KeyValue(hbaseRowKey, mHBaseFamily, mHBaseQual0, encodeStr("value0")));
-    kvs.add(new KeyValue(hbaseRowKey, mHBaseFamily, mHBaseQual1, encodeStr("value1")));
-    Result result = new Result(kvs);
-
-    KijiTableLayout tableLayout = getKiji().getMetaTable().getTableLayout("table");
-    KijiDataRequestBuilder builder = KijiDataRequest.builder();
-    builder.newColumnsDef().add("family", "qual0");
-    builder.newColumnsDef().add("family", "qual1");
-    builder.newColumnsDef().add("family", "qual2");
-    KijiDataRequest dataRequest = builder.build();
-    HBaseKijiRowData rowData = new HBaseKijiRowData(dataRequest, mCellDecoderFactory,
-        tableLayout, result, getKiji().getSchemaTable());
-
-    Put put = new Put(hbaseRowKey);
-    put.add(mHBaseFamily, mHBaseQual2, encodeStr("value2"));
-    rowData.merge(put);
-
-    assertTrue(rowData.containsColumn("family", "qual2"));
-    CharSequence string0 = rowData.getMostRecentValue("family", "qual0");
-    assertEquals("value0", string0.toString());
-    CharSequence string1 = rowData.getMostRecentValue("family", "qual1");
-    assertEquals("value1", string1.toString());
-    CharSequence string2 = rowData.getMostRecentValue("family", "qual2");
-    assertEquals("value2", string2.toString());
-  }
-
-  @Test
-  public void testMergeHBaseKijiRowData() throws IOException {
-    List<KeyValue> kvs = new ArrayList<KeyValue>();
-    EntityId row0 = mEntityIdFactory.getEntityId("row0");
-    byte[] hbaseRowKey = row0.getHBaseRowKey();
-    kvs.add(new KeyValue(hbaseRowKey, mHBaseFamily, mHBaseQual0, encodeStr("value0")));
-    kvs.add(new KeyValue(hbaseRowKey, mHBaseFamily, mHBaseQual1, encodeStr("value1")));
-    Result result = new Result(kvs);
-
-    KijiTableLayout tableLayout = getKiji().getMetaTable().getTableLayout("table");
-    KijiDataRequestBuilder builder = KijiDataRequest.builder();
-    builder.newColumnsDef().add("family", "qual0")
-        .add("family", "qual1")
-        .add("family", "qual2");
-    KijiDataRequest dataRequest = builder.build();
-    HBaseKijiRowData rowData = new HBaseKijiRowData(dataRequest, mCellDecoderFactory,
-        tableLayout, result, getKiji().getSchemaTable());
-
-    kvs = new ArrayList<KeyValue>();
-    kvs.add(new KeyValue(hbaseRowKey, mHBaseFamily, mHBaseQual2, encodeStr("value2")));
-    Result anotherResult = new Result(kvs);
-    HBaseKijiRowData anotherRowData = new HBaseKijiRowData(dataRequest, mCellDecoderFactory,
-        tableLayout, anotherResult, getKiji().getSchemaTable());
-    rowData.merge(anotherRowData);
-
-    assertTrue(rowData.containsColumn("family", "qual2"));
-    CharSequence string0 = rowData.getMostRecentValue("family", "qual0");
-    assertEquals("value0", string0.toString());
-    CharSequence string1 = rowData.getMostRecentValue("family", "qual1");
-    assertEquals("value1", string1.toString());
-    CharSequence string2 = rowData.getMostRecentValue("family", "qual2");
-    assertEquals("value2", string2.toString());
-  }
-
-  @Test
   public void testContainsColumn() throws Exception {
     final KijiTableLayout layout =
         KijiTableLayout.newLayout(KijiTableLayouts.getLayout(KijiTableLayouts.SIMPLE));
@@ -910,6 +849,56 @@ public class TestHBaseKijiRowData extends KijiClientTest {
       } finally {
         table.release();
       }
+  }
+
+  /**
+   * Tests that we can read a record using the writer schema.
+   * This tests the case when a specific record class is not found on the classpath.
+   * However, this behavior is bogus. The reader schema should not be tied to the classes
+   * available on the classpath.
+   *
+   * TODO(SCHEMA-295) the user may force using the writer schemas by overriding the
+   *     declared reader schemas. This test will be updated accordingly.
+   */
+  @Test
+  public void testWriterSchemaWhenSpecificRecordClassNotFound() throws Exception {
+    final Kiji kiji = getKiji();  // not owned
+    kiji.createTable(KijiTableLayouts.getLayout(KijiTableLayouts.WRITER_SCHEMA_TEST));
+    final KijiTable table = kiji.openTable("writer_schema");
+    try {
+      // Write a (generic) record:
+      final Schema writerSchema = Schema.createRecord("Found", null, "class.not", false);
+      writerSchema.setFields(Lists.newArrayList(
+          new Field("field", Schema.create(Schema.Type.STRING), null, null)));
+
+      final KijiTableWriter writer = table.openTableWriter();
+      try {
+        final GenericData.Record record = new GenericRecordBuilder(writerSchema)
+            .set("field", "value")
+            .build();
+        writer.put(table.getEntityId("eid"), "family", "qualifier", 1L, record);
+
+      } finally {
+        writer.close();
+      }
+
+      // Read the record back (should be a generic record):
+      final KijiTableReader reader = table.openTableReader();
+      try {
+        final KijiDataRequest dataRequest = KijiDataRequest.builder()
+            .addColumns(ColumnsDef.create().add("family", "qualifier"))
+            .build();
+        final KijiRowData row = reader.get(table.getEntityId("eid"), dataRequest);
+        final GenericData.Record record = row.getValue("family", "qualifier", 1L);
+        assertEquals(writerSchema, record.getSchema());
+        assertEquals("value", record.get("field").toString());
+      } finally {
+        writer.close();
+      }
+
+    } finally {
+      table.release();
+    }
   }
 
 }

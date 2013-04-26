@@ -130,6 +130,10 @@ public final class KijiToolLauncher extends Configured {
 
     // Get remaining arguments and invoke the tool with them.
     String[] toolArgs = parser.getRemainingArgs();
+
+    // Work around for CDH4 and Hadoop1 setting different "GenericOptionsParser used" flags.
+    conf.setBooleanIfUnset("mapred.used.genericoptionsparser", true);
+    conf.setBooleanIfUnset("mapreduce.client.genericoptionsparser.used", true);
     return tool.toolMain(Arrays.asList(toolArgs));
   }
 
