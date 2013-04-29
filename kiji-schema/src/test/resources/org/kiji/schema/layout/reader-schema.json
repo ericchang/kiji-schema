@@ -17,22 +17,33 @@
  * limitations under the License.
  */
 {
-  name: "writer_schema",
-  keys_format: {'org.kiji.schema.avro.RowKeyFormat2': {encoding: "RAW"}},
+  name: "table",
+  keys_format : {'org.kiji.schema.avro.RowKeyFormat2': {
+    encoding : "RAW"
+  }},
   locality_groups: [ {
     name: "default",
     in_memory: false,
-    max_versions: 1,
+    max_versions: 3,
     ttl_seconds: 2147483647,
     compression_type: "NONE",
     families: [ {
       name: "family",
       columns: [ {
-        name: "qualifier",
-        column_schema: {type: "CLASS", value: "class.not.Found"}
+        name: "integer",
+        column_schema: {type: "INLINE", value: '"int"'}
       }, {
-        name: "node",
-        column_schema: {type: "CLASS", value: "org.kiji.schema.avro.Node"}
+        name: "empty",
+        column_schema: {type: "CLASS", value: 'org.kiji.schema.avro.EmptyRecord'}
+      }, {
+        name: "record1",
+        column_schema: {type: "CLASS", value: 'org.kiji.schema.avro.TestRecord1'}
+      }, {
+        name: "record2",
+        column_schema: {type: "CLASS", value: 'org.kiji.schema.avro.TestRecord2'}
+      }, {
+        name: "record3",
+        column_schema: {type: "CLASS", value: 'org.kiji.schema.avro.TestRecord3'}
       } ]
     } ]
   } ],
