@@ -219,7 +219,7 @@ index ea729daa32c0f283141a83ba9241e7e59dec19a1..1bf08d84f753c51a69bc187f8447e9ee
      <kiji-delegation.version>1.0.0</kiji-delegation.version>
      <kiji-platforms.version>1.0.0</kiji-platforms.version>
 -    <fake-hbase.version>0.0.5</fake-hbase.version>
-+    <fake-hbase.version>0.0.6-SNAPSHOT</fake-hbase.version>
++    <fake-hbase.version>0.0.5-opower-1</fake-hbase.version>
    </properties>
  
    <modules>
