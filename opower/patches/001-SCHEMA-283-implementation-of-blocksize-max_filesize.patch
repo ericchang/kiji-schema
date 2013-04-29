@@ -1,0 +1,225 @@
+diff --git a/kiji-schema/src/main/avro/Layout.avdl b/kiji-schema/src/main/avro/Layout.avdl
+index 6f37f7ff1e67ea54d40700dda4a8803d268ccac0..2eb902f2f4ad4dd5e87453fb8783e23d8eaafe27 100644
+--- a/kiji-schema/src/main/avro/Layout.avdl
++++ b/kiji-schema/src/main/avro/Layout.avdl
+@@ -158,6 +158,9 @@ protocol KijiTableLayoutRecords {
+     /** Length of time in seconds to retain cells. */
+     int ttl_seconds;
+ 
++    /** Block size, see http://hbase.apache.org/apidocs/org/apache/hadoop/hbase/HColumnDescriptor.html#BLOCKSIZE */
++    union { null, int } block_size = null;
++
+     /** Data compression type. */
+     CompressionType compression_type;
+ 
+@@ -321,6 +324,12 @@ protocol KijiTableLayoutRecords {
+     /** Name of the table ([a-zA-Z0-9_]+). */
+     string name;
+ 
++    /** Max file size of an hbase region. See http://hbase.apache.org/apidocs/org/apache/hadoop/hbase/HTableDescriptor.html#setMaxFileSize(long). */
++    union { null, long } max_filesize = null;
++
++    /** Maximum size of the hbase memstore. See http://hbase.apache.org/apidocs/org/apache/hadoop/hbase/HTableDescriptor.html#setMemStoreFlushSize(long) */
++    union { null, long } memstore_flushsize = null;
++
+     /** User description of the table. */
+     string description = "";
+ 
+diff --git a/kiji-schema/src/main/java/org/kiji/schema/impl/HBaseKiji.java b/kiji-schema/src/main/java/org/kiji/schema/impl/HBaseKiji.java
+index 742dd4048c0d82e1c6648804df6cc5e5f9c2219a..d4aa3bc82fd46d72da6c35ba898d26cc55ab90d1 100644
+--- a/kiji-schema/src/main/java/org/kiji/schema/impl/HBaseKiji.java
++++ b/kiji-schema/src/main/java/org/kiji/schema/impl/HBaseKiji.java
+@@ -22,10 +22,12 @@ package org.kiji.schema.impl;
+ import java.io.IOException;
+ import java.io.PrintStream;
+ import java.util.List;
++import java.util.concurrent.TimeUnit;
+ import java.util.concurrent.atomic.AtomicBoolean;
+ import java.util.concurrent.atomic.AtomicInteger;
+ 
+ import com.google.common.base.Preconditions;
++import com.google.common.util.concurrent.Uninterruptibles;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hbase.HColumnDescriptor;
+ import org.apache.hadoop.hbase.HTableDescriptor;
+@@ -33,6 +35,7 @@ import org.apache.hadoop.hbase.TableExistsException;
+ import org.apache.hadoop.hbase.TableNotFoundException;
+ import org.apache.hadoop.hbase.client.HBaseAdmin;
+ import org.apache.hadoop.hbase.util.Bytes;
++import org.apache.hadoop.hbase.util.Pair;
+ import org.slf4j.Logger;
+ import org.slf4j.LoggerFactory;
+ 
+@@ -463,8 +466,9 @@ public final class HBaseKiji implements Kiji {
+     final KijiManagedHBaseTableName hbaseTableName =
+         KijiManagedHBaseTableName.getKijiTableName(mURI.getInstance(), tableName);
+     HTableDescriptor currentTableDescriptor = null;
++    byte[] tableNameAsBytes = hbaseTableName.toBytes();
+     try {
+-      currentTableDescriptor = getHBaseAdmin().getTableDescriptor(hbaseTableName.toBytes());
++      currentTableDescriptor = getHBaseAdmin().getTableDescriptor(tableNameAsBytes);
+     } catch (TableNotFoundException tnfe) {
+       if (!dryRun) {
+         throw tnfe; // Not in dry-run mode; table needs to exist. Rethrow exception.
+@@ -500,6 +504,29 @@ public final class HBaseKiji implements Kiji {
+         getHBaseAdmin().disableTable(hbaseTableName.toString());
+       }
+ 
++      if (dryRun) {
++        if (newTableDescriptor.getMaxFileSize() != currentTableDescriptor.getMaxFileSize()) {
++          printStream.printf("  Changing max_filesize from %d to %d: %n",
++              currentTableDescriptor.getMaxFileSize(),
++              newTableDescriptor.getMaxFileSize());
++        }
++        if (newTableDescriptor.getMaxFileSize() != currentTableDescriptor.getMaxFileSize()) {
++          printStream.printf("  Changing memstore_flushsize from %d to %d: %n",
++              currentTableDescriptor.getMemStoreFlushSize(),
++              newTableDescriptor.getMemStoreFlushSize());
++          }
++      } else {
++        LOG.debug("Modifying table descriptor");
++        getHBaseAdmin().modifyTable(tableNameAsBytes, newTableDescriptor);
++      }
++
++      LOG.debug("Waiting for table modification to complete...");
++      Pair<Integer, Integer> status = getHBaseAdmin().getAlterStatus(tableNameAsBytes);
++      while (status.getFirst() > 0) {
++        Uninterruptibles.sleepUninterruptibly(1, TimeUnit.SECONDS);
++        status = getHBaseAdmin().getAlterStatus(tableNameAsBytes);
++      }
++
+       for (HColumnDescriptor newColumnDescriptor : newTableDescriptor.getFamilies()) {
+         final String columnName = Bytes.toString(newColumnDescriptor.getName());
+         final ColumnId columnId = ColumnId.fromString(columnName);
+diff --git a/kiji-schema/src/main/java/org/kiji/schema/impl/HColumnDescriptorComparator.java b/kiji-schema/src/main/java/org/kiji/schema/impl/HColumnDescriptorComparator.java
+index ec9ae22638e655e091ee093defe1962d47f52117..000c5966cb113675925a952f9ec51a05d810926d 100644
+--- a/kiji-schema/src/main/java/org/kiji/schema/impl/HColumnDescriptorComparator.java
++++ b/kiji-schema/src/main/java/org/kiji/schema/impl/HColumnDescriptorComparator.java
+@@ -50,6 +50,10 @@ public class HColumnDescriptorComparator implements Comparator<HColumnDescriptor
+     if (inMemoryResult != 0) {
+       return inMemoryResult;
+     }
++    int blockSizeResult = Integer.valueOf(o1.getBlocksize()).compareTo(o2.getBlocksize());
++    if (blockSizeResult != 0) {
++      return blockSizeResult;
++    }
+     // TODO: Add things like bloomfiltertype as necessary.
+     return o1.getCompressionType().toString().compareTo(o2.getCompressionType().toString());
+   }
+diff --git a/kiji-schema/src/main/java/org/kiji/schema/impl/HTableDescriptorComparator.java b/kiji-schema/src/main/java/org/kiji/schema/impl/HTableDescriptorComparator.java
+index 28d548b56ea13887cab0796dacd5287eacb758a5..cb6af5c82b2bd4f91cbf4c0faf48b6b339f24188 100644
+--- a/kiji-schema/src/main/java/org/kiji/schema/impl/HTableDescriptorComparator.java
++++ b/kiji-schema/src/main/java/org/kiji/schema/impl/HTableDescriptorComparator.java
+@@ -29,8 +29,8 @@ import org.kiji.schema.hbase.KijiManagedHBaseTableName;
+ 
+ /**
+  * Compares {@link org.apache.hadoop.hbase.HTableDescriptor}s.  They
+- * are equal if they have the same HTable name with the same column
+- * families.
++ * are equal if they have the same HTable name, same max file size,
++ * memstore flushsize with the same column families.
+  */
+ @ApiAudience.Private
+ public class HTableDescriptorComparator implements Comparator<HTableDescriptor> {
+@@ -40,6 +40,15 @@ public class HTableDescriptorComparator implements Comparator<HTableDescriptor>
+     if (nameResult != 0) {
+       return nameResult;
+     }
++    int maxFileSizeResult = Long.valueOf(o1.getMaxFileSize()).compareTo(o2.getMaxFileSize());
++    if (maxFileSizeResult != 0) {
++          return maxFileSizeResult;
++    }
++    long memstoreFlushSizeResult =
++            Long.valueOf(o1.getMemStoreFlushSize()).compareTo(o2.getMemStoreFlushSize());
++    if (memstoreFlushSizeResult != 0) {
++        return (int) memstoreFlushSizeResult;
++    }
+     HColumnDescriptor[] families1 = o1.getColumnFamilies();
+     HColumnDescriptor[] families2 = o2.getColumnFamilies();
+     int familiesResult = Integer.valueOf(families1.length).compareTo(families2.length);
+diff --git a/kiji-schema/src/main/java/org/kiji/schema/layout/impl/HTableSchemaTranslator.java b/kiji-schema/src/main/java/org/kiji/schema/layout/impl/HTableSchemaTranslator.java
+index 70707bd59cb9c474b79c1e2bc5cad198d55be7cc..9fbae0b4f4890b647d6d0fbe89e7a2635580b1b3 100644
+--- a/kiji-schema/src/main/java/org/kiji/schema/layout/impl/HTableSchemaTranslator.java
++++ b/kiji-schema/src/main/java/org/kiji/schema/layout/impl/HTableSchemaTranslator.java
+@@ -23,6 +23,7 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
+ import org.apache.hadoop.hbase.HTableDescriptor;
+ 
+ import org.kiji.annotations.ApiAudience;
++import org.kiji.schema.avro.TableLayoutDesc;
+ import org.kiji.schema.hbase.KijiManagedHBaseTableName;
+ import org.kiji.schema.layout.KijiTableLayout;
+ import org.kiji.schema.layout.KijiTableLayout.LocalityGroupLayout;
+@@ -55,6 +56,14 @@ public final class HTableSchemaTranslator {
+     final KijiManagedHBaseTableName hbaseTableName =
+         KijiManagedHBaseTableName.getKijiTableName(kijiInstanceName, tableName);
+     final HTableDescriptor tableDescriptor = new HTableDescriptor(hbaseTableName.toString());
++      TableLayoutDesc tableLayoutDesc = tableLayout.getDesc();
++
++    if (tableLayoutDesc.getMaxFilesize() != null) {
++        tableDescriptor.setMaxFileSize(tableLayoutDesc.getMaxFilesize());
++    }
++    if (tableLayoutDesc.getMemstoreFlushsize() != null) {
++        tableDescriptor.setMemStoreFlushSize(tableLayoutDesc.getMemstoreFlushsize());
++    }
+ 
+     // Add the columns.
+     for (LocalityGroupLayout localityGroup : tableLayout.getLocalityGroupMap().values()) {
+@@ -77,7 +86,10 @@ public final class HTableSchemaTranslator {
+         localityGroup.getDesc().getCompressionType().toString(),
+         localityGroup.getDesc().getInMemory(),
+         true,  // block cache
++        localityGroup.getDesc().getBlockSize() != null ? localityGroup.getDesc().getBlockSize()
++                : HColumnDescriptor.DEFAULT_BLOCKSIZE,
+         localityGroup.getDesc().getTtlSeconds(),
+-        HColumnDescriptor.DEFAULT_BLOOMFILTER);
++        HColumnDescriptor.DEFAULT_BLOOMFILTER,
++        HColumnDescriptor.DEFAULT_REPLICATION_SCOPE);
+   }
+ }
+diff --git a/kiji-schema/src/main/java/org/kiji/schema/util/FromJson.java b/kiji-schema/src/main/java/org/kiji/schema/util/FromJson.java
+index 142fd71a0ec9fa37d0cf4e1dde8c151d83bf99ff..a064a355d9cf38e6f9389086b5a656d9d503eacc 100644
+--- a/kiji-schema/src/main/java/org/kiji/schema/util/FromJson.java
++++ b/kiji-schema/src/main/java/org/kiji/schema/util/FromJson.java
+@@ -77,7 +77,7 @@ public final class FromJson {
+       return json.getIntValue();
+     }
+     case LONG: {
+-      if (!json.isLong()) {
++      if (!json.isLong() && !json.isInt()) {
+         throw new IOException(String.format(
+             "Avro schema specifies '%s' but got JSON value: '%s'.",
+             schema, json));
+diff --git a/kiji-schema/src/test/resources/org/kiji/schema/layout/full-featured-layout.json b/kiji-schema/src/test/resources/org/kiji/schema/layout/full-featured-layout.json
+index dbfdff2b4aaf60db061847dd946eff97aae83d3f..17ef5d34bc05146f9c35e8c8c84ac60c4503b4e8 100644
+--- a/kiji-schema/src/test/resources/org/kiji/schema/layout/full-featured-layout.json
++++ b/kiji-schema/src/test/resources/org/kiji/schema/layout/full-featured-layout.json
+@@ -18,6 +18,8 @@
+  */
+ {
+   name : "user",
++  max_filesize : 10737418240,
++  memstore_flushsize : 268435456,
+   keys_format : {
+     encoding : "HASH",
+     hash_type : "MD5",
+@@ -28,6 +30,7 @@
+     description : "Default data stored forever on disk.",
+     in_memory : false,
+     max_versions : 2147483647,
++    block_size : 64,
+     ttl_seconds : 2147483647,
+     compression_type : "GZ",
+     families : [ {
+diff --git a/pom.xml b/pom.xml
+index ea729daa32c0f283141a83ba9241e7e59dec19a1..1bf08d84f753c51a69bc187f8447e9eed2f512e6 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -37,7 +37,7 @@
+   <properties>
+     <kiji-delegation.version>1.0.0</kiji-delegation.version>
+     <kiji-platforms.version>1.0.0</kiji-platforms.version>
+-    <fake-hbase.version>0.0.5</fake-hbase.version>
++    <fake-hbase.version>0.0.6-SNAPSHOT</fake-hbase.version>
+   </properties>
+ 
+   <modules>

@@ -1,0 +1,740 @@
+diff --git a/kiji-schema/src/main/java/org/kiji/schema/filter/FormattedEntityIdRowFilter.java b/kiji-schema/src/main/java/org/kiji/schema/filter/FormattedEntityIdRowFilter.java
+new file mode 100644
+index 0000000..de61789
+--- /dev/null
++++ b/kiji-schema/src/main/java/org/kiji/schema/filter/FormattedEntityIdRowFilter.java
+@@ -0,0 +1,326 @@
++/**
++ * (c) Copyright 2012 WibiData, Inc.
++ *
++ * See the NOTICE file distributed with this work for additional
++ * information regarding copyright ownership.
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.kiji.schema.filter;
++
++import java.io.IOException;
++import java.nio.ByteBuffer;
++import java.util.Arrays;
++
++import com.google.common.base.Charsets;
++import com.google.common.base.Objects;
++import com.google.common.base.Preconditions;
++
++import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
++import org.apache.hadoop.hbase.filter.Filter;
++import org.apache.hadoop.hbase.filter.RegexStringComparator;
++import org.apache.hadoop.hbase.filter.RowFilter;
++import org.apache.hadoop.hbase.util.Bytes;
++
++import org.codehaus.jackson.JsonNode;
++import org.codehaus.jackson.node.ArrayNode;
++import org.codehaus.jackson.node.JsonNodeFactory;
++import org.codehaus.jackson.node.ObjectNode;
++
++import org.kiji.annotations.ApiAudience;
++import org.kiji.annotations.ApiStability;
++import org.kiji.schema.KijiDataRequest;
++import org.kiji.schema.KijiIOException;
++import org.kiji.schema.avro.RowKeyEncoding;
++import org.kiji.schema.avro.RowKeyFormat2;
++import org.kiji.schema.util.FromJson;
++import org.kiji.schema.util.ToJson;
++
++/**
++ * A KijiRowFilter that filters out rows that do not match the components
++ * specified.  Only components that are specified are matched on, and the
++ * components that are left {@code null} can match anything.  Think of this as
++ * a bit mask for components.  This filter understands hash prefixes and ignores
++ * them when attempting to match.
++ *
++ * <p>For example, for a table defined with a row key format of {@code INTEGER},
++ * {@code LONG}, {@code STRING}:</p>
++ * <table>
++ * <tr><th>Filter</th><th>Row Key</th><th>Match</th></tr>
++ * <tr>
++ *   <td>({@code 100, 1000L, "value"})</td>
++ *   <td>({@code 100, 1000L, "value"})</td>
++ *   <td>yes</td>
++ * </tr>
++ * <tr>
++ *   <td>({@code 100, 1000L, "value"})</td>
++ *   <td>({@code 200, 2000L, "no value"})</td>
++ *   <td>no</td>
++ * </tr>
++ * <tr>
++ *   <td>({@code 100, null, "value"})</td>
++ *   <td>({@code 100, 2000L, "value"})</td>
++ *   <td>yes</td>
++ * </tr>
++ * <tr>
++ *   <td>({@code 100, null, "value"})</td>
++ *   <td>({@code 100, null, null})</td>
++ *   <td>no</td>
++ * </tr>
++ * </table>
++ *
++ * <p>The filter functionality is accomplished using a {@link
++ * RegexStringComparator} in combination with a {@link RowFilter}. The regular
++ * expression is constructed using the same component conversion rules used to
++ * create a FormattedEntityId.
++ */
++@ApiAudience.Public
++@ApiStability.Evolving
++public final class FormattedEntityIdRowFilter extends KijiRowFilter {
++  /** The name of the row key format node. */
++  private static final String ROW_KEY_FORMAT_NODE = "rowKeyFormat";
++
++  /** The name of the components node. */
++  private static final String COMPONENTS_NODE = "components";
++
++  /** The format of the row key. */
++  private final RowKeyFormat2 mRowKeyFormat;
++
++  /**
++   * The list of components to match on, with {@code null}s indicating a match
++   * on any value.
++   */
++  private final Object[] mComponents;
++
++  /**
++   * Creates a new <code>FormattedEntityIdRowFilter</code> instance. The row key
++   * format must have an encoding of {@link RowKeyEncoding.FORMATTED}, and if
++   * there is a salt defined, it must not be set to suppress key
++   * materialization.  If key materialization were suppressed, then there would
++   * be no component fields to match against.
++   *
++   * @param rowKeyFormat the row key format of the table this filter will be used on
++   * @param components the components to match on, with {@code null}s indicating
++   *     a match on any value
++   */
++  //TODO: allow for fewer components to be specified, filling the rest in with
++  //'null'
++  public FormattedEntityIdRowFilter(RowKeyFormat2 rowKeyFormat, Object... components) {
++    Preconditions.checkNotNull(rowKeyFormat, "RowKeyFormat must be specified");
++    Preconditions.checkArgument(rowKeyFormat.getEncoding().equals(RowKeyEncoding.FORMATTED),
++        "FormattedEntityIdRowFilter only works with formatted entity IDs");
++    if (null != rowKeyFormat.getSalt()) {
++      Preconditions.checkArgument(!rowKeyFormat.getSalt().getSuppressKeyMaterialization(),
++          "FormattedEntityIdRowFilter only works with materialized keys");
++    }
++    Preconditions.checkNotNull(components, "At least one component must be specified");
++    Preconditions.checkArgument(components.length > 0, "At least one component must be specified");
++    Preconditions.checkArgument(components.length <= rowKeyFormat.getComponents().size(),
++        "More components given (%s) than are in the row key format specification (%s)",
++        components.length, rowKeyFormat.getComponents().size());
++
++    mRowKeyFormat = rowKeyFormat;
++    mComponents = components;
++  }
++
++  /** {@inheritDoc} */
++  @Override
++  public KijiDataRequest getDataRequest() {
++    return KijiDataRequest.builder().build();
++  }
++
++  /** {@inheritDoc} */
++  @Override
++  public Filter toHBaseFilter(Context context) throws IOException {
++    // Define a regular expression that effectively creates a mask for the row
++    // key based on the key format and the components passed in.  Prefix hashes
++    // are skipped over, and null components match any value.
++    // ISO-8859-1 is used so that numerals map to valid characters
++    // see http://stackoverflow.com/a/1387184
++    StringBuilder regex = new StringBuilder("^"); // ^ matches the beginning of the string
++    if (null != mRowKeyFormat.getSalt()) {
++      if (mRowKeyFormat.getSalt().getHashSize() > 0) {
++        // match any character exactly 'hash size' number of times
++        regex.append(".{").append(mRowKeyFormat.getSalt().getHashSize()).append("}");
++      }
++    }
++    for (int i = 0; i < mComponents.length; i++) {
++      final Object component = mComponents[i];
++      switch (mRowKeyFormat.getComponents().get(i).getType()) {
++        case INTEGER:
++          if (null == component) {
++            // null integers can be excluded entirely if there are just nulls at
++            // the end of the EntityId, otherwise, match the correct number of
++            // bytes
++            regex.append("(.{").append(Bytes.SIZEOF_INT).append("})?");
++          } else {
++            byte[] tempBytes = ByteBuffer.allocate(Integer.SIZE / Byte.SIZE)
++                .putInt((Integer) component).array();
++            // FormattedEntityId flips the sign of the most significant bit to
++            // maintain byte ordering, so do the same operation here
++            tempBytes[0] = (byte) ((int) tempBytes[0] ^ (int) Byte.MIN_VALUE);
++            // match each byte in the integer using a regex hex sequence
++            for (byte tempByte : tempBytes) {
++              regex.append(String.format("\\x%02x", tempByte & 0xFF));
++            }
++          }
++          break;
++        case LONG:
++          if (null == component) {
++            // null longs can be excluded entirely if there are just nulls at
++            // the end of the EntityId, otherwise, match the correct number of
++            // bytes
++            regex.append("(.{").append(Bytes.SIZEOF_LONG).append("})?");
++          } else {
++            byte[] tempBytes = ByteBuffer.allocate(Long.SIZE / Byte.SIZE)
++                .putLong((Long) component).array();
++            // FormattedEntityId flips the sign of the most significant bit to
++            // maintain byte ordering, so do the same operation here
++            tempBytes[0] = (byte) ((int) tempBytes[0] ^ (int) Byte.MIN_VALUE);
++            // match each byte in the long using a regex hex sequence
++            for (byte tempByte : tempBytes) {
++              regex.append(String.format("\\x%02x", tempByte & 0xFF));
++            }
++          }
++          break;
++        case STRING:
++          if (null == component) {
++            // match any non-zero character at least once, followed by a zero
++            // delimiter, or match nothing at all in case the component was at
++            // the end of the EntityId and skipped entirely
++            regex.append("([^\\x00]+\\x00)?");
++          } else {
++            // FormattedEntityId converts a string component to UTF-8 bytes to
++            // create the HBase key.  RegexStringComparator will convert the
++            // value it sees (ie, the HBase key) to a string using ISO-8859-1.
++            // Therefore, we need to write ISO-8859-1 characters to our regex so
++            // that the comparison happens correctly.
++            byte[] utfBytes = ((String) component).getBytes(Charsets.UTF_8);
++            String isoString = new String(utfBytes, Charsets.ISO_8859_1);
++            regex.append(isoString).append("\\x00");
++          }
++          break;
++        default:
++          throw new IllegalStateException("Unknown component type: "
++              + mRowKeyFormat.getComponents().get(i).getType());
++      }
++    }
++    regex.append("$"); // $ matches the end of the string
++
++    final RegexStringComparator comparator = new RegexStringComparator(regex.toString());
++    comparator.setCharset(Charsets.ISO_8859_1);
++    return new RowFilter(CompareOp.EQUAL, comparator);
++  }
++
++  /** {@inheritDoc} */
++  @Override
++  public boolean equals(Object other) {
++    if (!(other instanceof FormattedEntityIdRowFilter)) {
++      return false;
++    } else {
++      final FormattedEntityIdRowFilter otherFilter = (FormattedEntityIdRowFilter) other;
++      return Objects.equal(otherFilter.mRowKeyFormat, this.mRowKeyFormat)
++          && Arrays.equals(otherFilter.mComponents, this.mComponents);
++    }
++  }
++
++  /** {@inheritDoc} */
++  @Override
++  public int hashCode() {
++    return Objects.hashCode(mRowKeyFormat, mComponents);
++  }
++
++  /** {@inheritDoc} */
++  @Override
++  protected JsonNode toJsonNode() {
++    final ObjectNode root = JsonNodeFactory.instance.objectNode();
++    try {
++      root.put(ROW_KEY_FORMAT_NODE,
++          ToJson.toAvroJsonString(mRowKeyFormat, mRowKeyFormat.getSchema()));
++      final ArrayNode components = root.putArray(COMPONENTS_NODE);
++      for (int i = 0; i < mComponents.length; i++) {
++        final Object component = mComponents[i];
++        if (null == component) {
++          components.add(components.nullNode());
++        } else {
++          switch (mRowKeyFormat.getComponents().get(i).getType()) {
++            case INTEGER:
++              components.add((Integer)component);
++              break;
++            case LONG:
++              components.add((Long)component);
++              break;
++            case STRING:
++              components.add((String)component);
++              break;
++            default:
++              throw new IllegalStateException("Unknown component type: "
++                  + mRowKeyFormat.getComponents().get(i).getType());
++          }
++        }
++      }
++    } catch (IOException ioe) {
++      throw new KijiIOException(ioe);
++    }
++    return root;
++  }
++
++  /** {@inheritDoc} */
++  @Override
++  protected Class<? extends KijiRowFilterDeserializer> getDeserializerClass() {
++    return FormattedEntityIdRowFilterDeserializer.class;
++  }
++
++  /** Deserializes {@code FormattedEntityIdRowFilter}. */
++  public static final class FormattedEntityIdRowFilterDeserializer
++      implements KijiRowFilterDeserializer {
++    /** {@inheritDoc} */
++    @Override
++    public KijiRowFilter createFromJson(JsonNode root) {
++      try {
++        final RowKeyFormat2 rowKeyFormat = (RowKeyFormat2) FromJson.fromAvroJsonString(
++            root.path(ROW_KEY_FORMAT_NODE).getTextValue(), RowKeyFormat2.SCHEMA$);
++        final JsonNode componentsJsonNode = root.path(COMPONENTS_NODE);
++        Preconditions.checkArgument(componentsJsonNode.isArray(),
++            "Node 'components' must be an array");
++        final ArrayNode componentsNode = (ArrayNode)componentsJsonNode;
++        final Object[] components = new Object[componentsNode.size()];
++        for (int i = 0; i < components.length; i++) {
++          JsonNode componentNode = componentsNode.get(i);
++          if (componentNode.isNull()) {
++            components[i] = null; // an explicit no-op
++          } else {
++            switch (rowKeyFormat.getComponents().get(i).getType()) {
++              case INTEGER:
++                components[i] = Integer.valueOf(componentNode.getIntValue());
++                break;
++              case LONG:
++                components[i] = Long.valueOf(componentNode.getLongValue());
++                break;
++              case STRING:
++                components[i] = componentNode.getTextValue();
++                break;
++              default:
++                throw new IllegalStateException("Unknown component type: "
++                    + rowKeyFormat.getComponents().get(i).getType());
++            }
++          }
++        }
++        return new FormattedEntityIdRowFilter(rowKeyFormat, components);
++      } catch (IOException ioe) {
++        throw new KijiIOException(ioe);
++      }
++    }
++  }
++}
+diff --git a/kiji-schema/src/test/java/org/kiji/schema/filter/TestFormattedEntityIdRowFilter.java b/kiji-schema/src/test/java/org/kiji/schema/filter/TestFormattedEntityIdRowFilter.java
+new file mode 100644
+index 0000000..1be88ac
+--- /dev/null
++++ b/kiji-schema/src/test/java/org/kiji/schema/filter/TestFormattedEntityIdRowFilter.java
+@@ -0,0 +1,364 @@
++/**
++ * (c) Copyright 2013 WibiData, Inc.
++ *
++ * See the NOTICE file distributed with this work for additional
++ * information regarding copyright ownership.
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.kiji.schema.filter;
++
++import static com.google.common.collect.Lists.newArrayList;
++
++import static org.junit.Assert.assertEquals;
++
++import static org.kiji.schema.avro.ComponentType.*;
++
++import java.lang.reflect.Field;
++import java.util.List;
++import java.util.Random;
++
++import org.apache.hadoop.hbase.filter.Filter;
++import org.apache.hadoop.hbase.filter.RowFilter;
++import org.apache.hadoop.hbase.filter.WritableByteArrayComparable;
++import org.apache.hadoop.hbase.util.Bytes;
++
++import org.junit.Test;
++
++import org.kiji.schema.EntityId;
++import org.kiji.schema.EntityIdFactory;
++import org.kiji.schema.avro.ComponentType;
++import org.kiji.schema.avro.HashSpec;
++import org.kiji.schema.avro.HashType;
++import org.kiji.schema.avro.RowKeyComponent;
++import org.kiji.schema.avro.RowKeyEncoding;
++import org.kiji.schema.avro.RowKeyFormat2;
++
++/** Tests the FormattedEntityIdRowFilter. */
++public class TestFormattedEntityIdRowFilter {
++  // filter is a backwards operation, so false means the row will be included
++  private static final boolean INCLUDE = false;
++  private static final boolean EXCLUDE = true;
++
++  private static final Random RANDOM = new Random(1001L);
++
++  private static final RowKeyFormat2[] TEST_CASES = new RowKeyFormat2[] {
++    createRowKeyFormat(1, INTEGER),
++    createRowKeyFormat(5, INTEGER),
++
++    createRowKeyFormat(1, LONG),
++    createRowKeyFormat(5, LONG),
++
++    createRowKeyFormat(1, STRING),
++    createRowKeyFormat(5, STRING),
++
++    createRowKeyFormat(1, STRING, STRING),
++    createRowKeyFormat(5, STRING, STRING),
++
++    createRowKeyFormat(1, INTEGER, INTEGER),
++    createRowKeyFormat(5, INTEGER, INTEGER),
++
++    createRowKeyFormat(1, LONG, LONG),
++    createRowKeyFormat(5, LONG, LONG),
++
++    createRowKeyFormat(1, INTEGER, LONG, STRING),
++    createRowKeyFormat(5, INTEGER, LONG, STRING),
++
++    createRowKeyFormat(1, STRING, INTEGER, LONG, STRING),
++    createRowKeyFormat(5, STRING, INTEGER, LONG, STRING),
++  };
++
++  private static RowKeyFormat2 createRowKeyFormat(int hashLength, ComponentType... componentTypes) {
++    RowKeyFormat2.Builder builder = RowKeyFormat2.newBuilder()
++        .setEncoding(RowKeyEncoding.FORMATTED);
++    if (hashLength > 0) {
++      builder.setSalt(new HashSpec(HashType.MD5, hashLength, false));
++    }
++    List<RowKeyComponent> components = newArrayList();
++    char field = 'a';
++    for (ComponentType componentType : componentTypes) {
++      components.add(new RowKeyComponent(String.valueOf(field), componentType));
++      field = (char) (field + 1);
++    }
++    builder.setComponents(components);
++    return builder.build();
++  }
++
++  private static FormattedEntityIdRowFilter createFilter(RowKeyFormat2 format, Object... components)
++      throws Exception {
++    return new FormattedEntityIdRowFilter(format, components);
++  }
++
++  private static Object createStableValue(ComponentType type) {
++    switch (type) {
++      case INTEGER:
++        return 42;
++      case LONG:
++        return 349203L;
++      case STRING:
++        return "value";
++      default:
++        throw new IllegalArgumentException("Unknown ComponentType: " + type);
++    }
++  }
++
++  private static Object createRandomValue(ComponentType type) {
++    switch (type) {
++      case INTEGER:
++        return RANDOM.nextInt();
++      case LONG:
++        return RANDOM.nextLong();
++      case STRING:
++        byte[] bytes = new byte[16];
++        RANDOM.nextBytes(bytes);
++        return Bytes.toStringBinary(bytes);
++      default:
++        throw new IllegalArgumentException("Unknown ComponentType: " + type);
++    }
++  }
++
++  private static Object createMinValue(ComponentType type) {
++    switch (type) {
++      case INTEGER:
++        return Integer.MIN_VALUE;
++      case LONG:
++        return Long.MIN_VALUE;
++      case STRING:
++        return "";
++      default:
++        throw new IllegalArgumentException("Unknown ComponentType: " + type);
++    }
++  }
++
++  private static class FilterAndTestValues {
++    private List<Object> mFilterValues = newArrayList();
++    private List<List<Object>> mIncludedTestValues = newArrayList();
++    private List<List<Object>> mExcludedTestValues = newArrayList();
++  }
++
++  private static List<FilterAndTestValues> createFilterAndTestValues(
++      List<RowKeyComponent> components) {
++    List<FilterAndTestValues> filterAndTestValues = newArrayList();
++
++    List<List<Object>> filterCombinations = createFilterCombinations(components);
++    // System.out.printf("Combinations: %s%n", filterCombinations);
++    // skip over the last all-null combination, which does not make much sense
++    // for a filter
++    for (List<Object> filterValues : filterCombinations.subList(0, filterCombinations.size() - 1)) {
++      FilterAndTestValues fatv = new FilterAndTestValues();
++      fatv.mFilterValues = filterValues;
++
++      fatv.mIncludedTestValues.add(correctEntityComponents(components, filterValues));
++
++      List<List<Object>> excludedCombinations =
++          createExcludedCombinations(components, filterValues);
++      // System.err.printf("Excludes for %s are %s%n", filterValues, excludedCombinations);
++      for (List<Object> excludedCombination : excludedCombinations) {
++        fatv.mExcludedTestValues.add(excludedCombination);
++      }
++
++      filterAndTestValues.add(fatv);
++    }
++
++    return filterAndTestValues;
++  }
++
++  // corrects values so that the EntityId constructed from this set can be
++  // constructed. returns a new list with the corrected values
++  private static List<Object> correctEntityComponents(
++      List<RowKeyComponent> components, List<Object> values) {
++    List<Object> correctedValues = newArrayList(values);
++    for (int i = 0; i < correctedValues.size(); i++) {
++      if (null == correctedValues.get(i)) {
++        correctedValues.set(i, createRandomValue(components.get(i).getType()));
++      }
++    }
++    return correctedValues;
++  }
++
++  private static List<List<Object>> createFilterCombinations(List<RowKeyComponent> components) {
++    List<List<Object>> combinations = newArrayList();
++    ComponentType type = components.get(0).getType();
++    if (components.size() == 1) {
++      combinations.add(newArrayList(createStableValue(type)));
++      combinations.add(newArrayList((Object)null));
++    } else {
++      List<List<Object>> subCombinations =
++          createFilterCombinations(components.subList(1, components.size()));
++      for (List<Object> subCombination : subCombinations) {
++        List<Object> newCombination = newArrayList(createStableValue(type));
++        newCombination.addAll(subCombination);
++        combinations.add(newCombination);
++
++        newCombination = newArrayList((Object)null);
++        newCombination.addAll(subCombination);
++        combinations.add(newCombination);
++      }
++    }
++    return combinations;
++  }
++
++  private static List<List<Object>> createExcludedCombinations(
++      List<RowKeyComponent> components, List<Object> filterValues) {
++    List<List<Object>> combinations = newArrayList();
++    ComponentType type = components.get(0).getType();
++    if (filterValues.size() == 1) {
++      combinations.add(newArrayList(createRandomValue(type)));
++      combinations.add(newArrayList(createMinValue(type)));
++    } else {
++      List<List<Object>> subCombinations = createExcludedCombinations(
++        components.subList(1, components.size()), filterValues.subList(1, filterValues.size()));
++      for (List<Object> subCombination : subCombinations) {
++        List<Object> newCombination = newArrayList(createRandomValue(type));
++        newCombination.addAll(subCombination);
++        combinations.add(newCombination);
++
++        newCombination = newArrayList(createMinValue(type));
++        newCombination.addAll(subCombination);
++        combinations.add(newCombination);
++      }
++    }
++    return combinations;
++  }
++
++  @Test
++  public void testAllCases() throws Exception {
++    for (RowKeyFormat2 rowKeyFormat : TEST_CASES) {
++      EntityIdFactory factory = EntityIdFactory.getFactory(rowKeyFormat);
++      List<FilterAndTestValues> filterAndTestValues =
++          createFilterAndTestValues(rowKeyFormat.getComponents());
++      for (FilterAndTestValues filterAndTest : filterAndTestValues) {
++        FormattedEntityIdRowFilter filter =
++            createFilter(rowKeyFormat, filterAndTest.mFilterValues.toArray());
++        for (List<Object> includedValues : filterAndTest.mIncludedTestValues) {
++          runTest(rowKeyFormat, filter, factory, INCLUDE, includedValues.toArray());
++        }
++        for (List<Object> excludedValues : filterAndTest.mExcludedTestValues) {
++          runTest(rowKeyFormat, filter, factory, EXCLUDE, excludedValues.toArray());
++        }
++      }
++    }
++  }
++
++  private final RowKeyFormat2 mRowKeyFormat = createRowKeyFormat(1, INTEGER, LONG, STRING);
++
++  private final EntityIdFactory mFactory = EntityIdFactory.getFactory(mRowKeyFormat);
++
++  @Test
++  public void testFormattedEntityIdRowFilter() throws Exception {
++    FormattedEntityIdRowFilter filter = createFilter(mRowKeyFormat, 100, null, "value");
++    runTest(mRowKeyFormat, filter, mFactory, INCLUDE, 100, 2000L, "value");
++    runTest(mRowKeyFormat, filter, mFactory, EXCLUDE, 100, null, null);
++    runTest(mRowKeyFormat, filter, mFactory, EXCLUDE, 0, null, null);
++  }
++
++  @Test
++  public void testPrefixMatching() throws Exception {
++    FormattedEntityIdRowFilter filter = createFilter(mRowKeyFormat, 42, null, null);
++    runTest(mRowKeyFormat, filter, mFactory, INCLUDE, 42, 4200L, "name");
++    runTest(mRowKeyFormat, filter, mFactory, INCLUDE, 42, 4200L, null);
++    runTest(mRowKeyFormat, filter, mFactory, INCLUDE, 42, null, null);
++    runTest(mRowKeyFormat, filter, mFactory, EXCLUDE, 43, 4200L, "name");
++  }
++
++  @Test
++  public void testMidComponentMatching() throws Exception {
++    FormattedEntityIdRowFilter filter = createFilter(mRowKeyFormat, null, 6000L, null);
++    runTest(mRowKeyFormat, filter, mFactory, INCLUDE, 50, 6000L, "anything");
++    runTest(mRowKeyFormat, filter, mFactory, INCLUDE, 50, 6000L, null);
++    runTest(mRowKeyFormat, filter, mFactory, EXCLUDE, 50, 5999L, "anything");
++  }
++
++  @Test
++  public void testSuffixComponentMatching() throws Exception {
++    FormattedEntityIdRowFilter filter = createFilter(mRowKeyFormat, null, null, "value");
++    runTest(mRowKeyFormat, filter, mFactory, INCLUDE, 50, 6000L, "value");
++    runTest(mRowKeyFormat, filter, mFactory, EXCLUDE, 50, 6000L, null);
++    runTest(mRowKeyFormat, filter, mFactory, EXCLUDE, 50, 5999L, "anything");
++  }
++
++  @Test
++  public void testPrefixNumberMatching() throws Exception {
++    RowKeyFormat2 rowKeyFormat = createRowKeyFormat(1, LONG, LONG);
++    EntityIdFactory factory = EntityIdFactory.getFactory(rowKeyFormat);
++    FormattedEntityIdRowFilter filter = createFilter(rowKeyFormat, 4224L, null);
++    runTest(rowKeyFormat, filter, factory, INCLUDE, 4224L, 5005L);
++    runTest(rowKeyFormat, filter, factory, INCLUDE, 4224L, null);
++    runTest(rowKeyFormat, filter, factory, INCLUDE, 4224L, Long.MAX_VALUE);
++    runTest(rowKeyFormat, filter, factory, INCLUDE, 4224L, Long.MIN_VALUE);
++    runTest(rowKeyFormat, filter, factory, EXCLUDE, Long.MIN_VALUE, 5005L);
++    runTest(rowKeyFormat, filter, factory, EXCLUDE, Long.MIN_VALUE, null);
++    runTest(rowKeyFormat, filter, factory, EXCLUDE, Long.MIN_VALUE, Long.MAX_VALUE);
++    runTest(rowKeyFormat, filter, factory, EXCLUDE, Long.MIN_VALUE, Long.MIN_VALUE);
++  }
++
++  @Test
++  public void testUnicodeStringInFilterMatching() throws Exception {
++    RowKeyFormat2 rowKeyFormat = createRowKeyFormat(1, STRING);
++    EntityIdFactory factory = EntityIdFactory.getFactory(rowKeyFormat);
++    String match = "This is a star: \u2605";
++    String noMatch = "This is not a star";
++    FormattedEntityIdRowFilter filter = createFilter(rowKeyFormat, match);
++    runTest(rowKeyFormat, filter, factory, INCLUDE, match);
++    runTest(rowKeyFormat, filter, factory, EXCLUDE, noMatch);
++  }
++
++  @Test
++  public void testUnicodeStringInEntityIdMatching() throws Exception {
++    RowKeyFormat2 rowKeyFormat = createRowKeyFormat(1, STRING);
++    EntityIdFactory factory = EntityIdFactory.getFactory(rowKeyFormat);
++    String match = "This is not a star";
++    String noMatch = "This is a star: \u2605";
++    FormattedEntityIdRowFilter filter = createFilter(rowKeyFormat, match);
++    runTest(rowKeyFormat, filter, factory, INCLUDE, match);
++    runTest(rowKeyFormat, filter, factory, EXCLUDE, noMatch);
++  }
++
++  private void runTest(RowKeyFormat2 rowKeyFormat, FormattedEntityIdRowFilter filter,
++      EntityIdFactory factory, boolean expectedFilter, Object... components) throws Exception {
++    // System.out.printf("Components %s%n", java.util.Arrays.asList(components));
++    EntityId entityId = factory.getEntityId(components);
++    byte[] hbaseKey = entityId.getHBaseRowKey();
++    Filter hbaseFilter = filter.toHBaseFilter(null);
++    boolean filtered = hbaseFilter.filterRowKey(hbaseKey, 0, hbaseKey.length);
++    String message = String.format(
++        "RowKeyFormat: %s%nComponents: %s%nEntityId: %s%nRegex: %s%nHBase key: %s%nIncluded: %s%n",
++        rowKeyFormat, fetchComponents(filter), entityId.toShellString(), fetchRegex(hbaseFilter),
++        toBinaryString(hbaseKey), !filtered);
++    System.out.println(message);
++    assertEquals(message, expectedFilter, filtered);
++  }
++
++  private String toBinaryString(byte[] bytes) {
++    StringBuilder buf = new StringBuilder();
++    for (byte b : bytes) {
++      buf.append(String.format("\\x%02x", b & 0xFF));
++    }
++    return buf.toString();
++  }
++
++  private String fetchComponents(FormattedEntityIdRowFilter filter) throws Exception {
++    Field componentField = filter.getClass().getDeclaredField("mComponents");
++    componentField.setAccessible(true);
++    return newArrayList((Object[])componentField.get(filter)).toString();
++  }
++
++  private String fetchRegex(Filter filter) throws Exception {
++    RowFilter rowFilter = (RowFilter) filter;
++    WritableByteArrayComparable comparator = rowFilter.getComparator();
++    Field patternField = comparator.getClass().getDeclaredField("pattern");
++    patternField.setAccessible(true);
++    return patternField.get(comparator).toString();
++  }
++}
+diff --git a/kiji-schema/src/test/java/org/kiji/schema/filter/TestKijiRowFilterSerialization.java b/kiji-schema/src/test/java/org/kiji/schema/filter/TestKijiRowFilterSerialization.java
+index 98e05b4..1529ab0 100644
+--- a/kiji-schema/src/test/java/org/kiji/schema/filter/TestKijiRowFilterSerialization.java
++++ b/kiji-schema/src/test/java/org/kiji/schema/filter/TestKijiRowFilterSerialization.java
+@@ -31,6 +31,12 @@ import org.codehaus.jackson.JsonNode;
+ import org.junit.Test;
+ 
+ import org.kiji.schema.DecodedCell;
++import org.kiji.schema.avro.ComponentType;
++import org.kiji.schema.avro.HashSpec;
++import org.kiji.schema.avro.HashType;
++import org.kiji.schema.avro.RowKeyComponent;
++import org.kiji.schema.avro.RowKeyEncoding;
++import org.kiji.schema.avro.RowKeyFormat2;
+ import org.kiji.schema.avro.TestComplexRecord;
+ import org.kiji.schema.avro.TestRecord;
+ 
+@@ -88,6 +94,20 @@ public class TestKijiRowFilterSerialization {
+         new DecodedCell(record.getSchema(), record)));
+   }
+ 
++  @Test
++  public void testFormattedEntityIdRowFilter() throws Exception {
++    runTest(new FormattedEntityIdRowFilter(
++        RowKeyFormat2.newBuilder()
++            .setEncoding(RowKeyEncoding.FORMATTED)
++            .setSalt(new HashSpec(HashType.MD5, 1, false))
++            .setComponents(ImmutableList.of(
++                new RowKeyComponent("a", ComponentType.INTEGER),
++                new RowKeyComponent("b", ComponentType.LONG),
++                new RowKeyComponent("c", ComponentType.STRING)))
++            .build(),
++        100, null, "value"));
++  }
++
+   private void runTest(KijiRowFilter original) throws Exception {
+     JsonNode serialized = original.toJson();
+     KijiRowFilter deserialized = KijiRowFilter.toFilter(serialized.toString());
