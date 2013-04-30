@@ -1,0 +1,13 @@
+diff --git a/kiji-schema/src/main/java/org/kiji/schema/impl/HBaseKijiRowData.java b/kiji-schema/src/main/java/org/kiji/schema/impl/HBaseKijiRowData.java
+index 1a80938..dffd2a2 100644
+--- a/kiji-schema/src/main/java/org/kiji/schema/impl/HBaseKijiRowData.java
++++ b/kiji-schema/src/main/java/org/kiji/schema/impl/HBaseKijiRowData.java
+@@ -717,7 +717,7 @@ public final class HBaseKijiRowData implements KijiRowData {
+         family);
+     final NavigableMap<String, T> result = Maps.newTreeMap();
+     for (String qualifier : getQualifiers(family)) {
+-      final T value = getMostRecentValue(family, qualifier);
++      final T value = (T) getMostRecentValue(family, qualifier);
+       result.put(qualifier, value);
+     }
+     return result;

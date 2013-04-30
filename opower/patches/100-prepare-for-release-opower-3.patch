@@ -7,14 +7,14 @@ index bc17f47..09ba343 100644
    <groupId>org.kiji.schema</groupId>
    <artifactId>build-resources</artifactId>
 -  <version>1.0.2</version>
-+  <version>1.0.2-opower-2</version>
++  <version>1.0.2-opower-3</version>
    <packaging>jar</packaging>
  
    <parent>
      <groupId>org.kiji.schema</groupId>
      <artifactId>kiji-schema-root</artifactId>
 -    <version>1.0.2</version>
-+    <version>1.0.2-opower-2</version>
++    <version>1.0.2-opower-3</version>
      <relativePath>..</relativePath>
    </parent>
  
@@ -27,14 +27,14 @@ index 49d7079..adb6f29 100644
    <groupId>org.kiji.schema</groupId>
    <artifactId>kiji-schema-cdh4mr1-bridge</artifactId>
 -  <version>1.0.2</version>
-+  <version>1.0.2-opower-2</version>
++  <version>1.0.2-opower-3</version>
    <packaging>jar</packaging>
  
    <parent>
      <groupId>org.kiji.schema</groupId>
      <artifactId>kiji-schema-root</artifactId>
 -    <version>1.0.2</version>
-+    <version>1.0.2-opower-2</version>
++    <version>1.0.2-opower-3</version>
      <relativePath>..</relativePath>
    </parent>
  
@@ -47,14 +47,14 @@ index 354622a..44d7db0 100644
    <groupId>org.kiji.schema</groupId>
    <artifactId>kiji-schema-hadoop1-bridge</artifactId>
 -  <version>1.0.2</version>
-+  <version>1.0.2-opower-2</version>
++  <version>1.0.2-opower-3</version>
    <packaging>jar</packaging>
  
    <parent>
      <groupId>org.kiji.schema</groupId>
      <artifactId>kiji-schema-root</artifactId>
 -    <version>1.0.2</version>
-+    <version>1.0.2-opower-2</version>
++    <version>1.0.2-opower-3</version>
      <relativePath>..</relativePath>
    </parent>
  
@@ -67,14 +67,14 @@ index 7e066a1..ff53967 100644
    <groupId>org.kiji.schema</groupId>
    <artifactId>kiji-schema</artifactId>
 -  <version>1.0.2</version>
-+  <version>1.0.2-opower-2</version>
++  <version>1.0.2-opower-3</version>
    <packaging>jar</packaging>
  
    <parent>
      <groupId>org.kiji.schema</groupId>
      <artifactId>kiji-schema-root</artifactId>
 -    <version>1.0.2</version>
-+    <version>1.0.2-opower-2</version>
++    <version>1.0.2-opower-3</version>
      <relativePath>..</relativePath>
    </parent>
  
@@ -87,14 +87,14 @@ index 3ea703c..f301e65 100644
    <groupId>org.kiji.schema</groupId>
    <artifactId>kiji-schema-platform-api</artifactId>
 -  <version>1.0.2</version>
-+  <version>1.0.2-opower-2</version>
++  <version>1.0.2-opower-3</version>
    <packaging>jar</packaging>
  
    <parent>
      <groupId>org.kiji.schema</groupId>
      <artifactId>kiji-schema-root</artifactId>
 -    <version>1.0.2</version>
-+    <version>1.0.2-opower-2</version>
++    <version>1.0.2-opower-3</version>
      <relativePath>..</relativePath>
    </parent>
  
@@ -107,7 +107,7 @@ index 995ce5a..27ab237 100644
    <groupId>org.kiji.schema</groupId>
    <artifactId>kiji-schema-root</artifactId>
 -  <version>1.0.2</version>
-+  <version>1.0.2-opower-2</version>
++  <version>1.0.2-opower-3</version>
    <packaging>pom</packaging>
  
    <parent>
