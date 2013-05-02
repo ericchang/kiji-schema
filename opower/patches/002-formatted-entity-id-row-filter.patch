@@ -1,9 +1,9 @@
 diff --git a/kiji-schema/src/main/java/org/kiji/schema/filter/FormattedEntityIdRowFilter.java b/kiji-schema/src/main/java/org/kiji/schema/filter/FormattedEntityIdRowFilter.java
 new file mode 100644
-index 0000000..de61789
+index 0000000..3e97096
 --- /dev/null
 +++ b/kiji-schema/src/main/java/org/kiji/schema/filter/FormattedEntityIdRowFilter.java
-@@ -0,0 +1,326 @@
+@@ -0,0 +1,338 @@
 +/**
 + * (c) Copyright 2012 WibiData, Inc.
 + *
@@ -118,10 +118,10 @@ index 0000000..de61789
 +   *
 +   * @param rowKeyFormat the row key format of the table this filter will be used on
 +   * @param components the components to match on, with {@code null}s indicating
-+   *     a match on any value
++   *     a match on any value. If fewer than the number of components defined in
++   *     the row key format are supplied, the rest will be filled in as {@code
++   *     null}.
 +   */
-+  //TODO: allow for fewer components to be specified, filling the rest in with
-+  //'null'
 +  public FormattedEntityIdRowFilter(RowKeyFormat2 rowKeyFormat, Object... components) {
 +    Preconditions.checkNotNull(rowKeyFormat, "RowKeyFormat must be specified");
 +    Preconditions.checkArgument(rowKeyFormat.getEncoding().equals(RowKeyEncoding.FORMATTED),
@@ -137,7 +137,19 @@ index 0000000..de61789
 +        components.length, rowKeyFormat.getComponents().size());
 +
 +    mRowKeyFormat = rowKeyFormat;
-+    mComponents = components;
++
++    // Fill in 'null' for any components defined in the row key format that have
++    // not been passed in as components for the filter.  This effectively makes
++    // a prefix filter, looking at only the components defined at the beginning
++    // of the EntityId.
++    if (components.length < rowKeyFormat.getComponents().size()) {
++      mComponents = new Object[rowKeyFormat.getComponents().size()];
++      for (int i = 0; i < components.length; i++) {
++        mComponents[i] = components[i];
++      }
++    } else {
++      mComponents = components;
++    }
 +  }
 +
 +  /** {@inheritDoc} */
@@ -332,10 +344,10 @@ index 0000000..de61789
 +}
 diff --git a/kiji-schema/src/test/java/org/kiji/schema/filter/TestFormattedEntityIdRowFilter.java b/kiji-schema/src/test/java/org/kiji/schema/filter/TestFormattedEntityIdRowFilter.java
 new file mode 100644
-index 0000000..1be88ac
+index 0000000..0606d0f
 --- /dev/null
 +++ b/kiji-schema/src/test/java/org/kiji/schema/filter/TestFormattedEntityIdRowFilter.java
-@@ -0,0 +1,364 @@
+@@ -0,0 +1,374 @@
 +/**
 + * (c) Copyright 2013 WibiData, Inc.
 + *
@@ -661,6 +673,16 @@ index 0000000..1be88ac
 +    FormattedEntityIdRowFilter filter = createFilter(rowKeyFormat, match);
 +    runTest(rowKeyFormat, filter, factory, INCLUDE, match);
 +    runTest(rowKeyFormat, filter, factory, EXCLUDE, noMatch);
++  }
++
++  @Test
++  public void testPrefixDefinedByFewerThanFormatComponents() throws Exception {
++    // this is the same as a filter defined with (100, null, null)
++    FormattedEntityIdRowFilter filter = createFilter(mRowKeyFormat, 100);
++    runTest(mRowKeyFormat, filter, mFactory, INCLUDE, 100, 2000L, "value");
++    runTest(mRowKeyFormat, filter, mFactory, INCLUDE, 100, null, null);
++    runTest(mRowKeyFormat, filter, mFactory, EXCLUDE, 0, 2000L, "value");
++    runTest(mRowKeyFormat, filter, mFactory, EXCLUDE, 0, null, null);
 +  }
 +
 +  private void runTest(RowKeyFormat2 rowKeyFormat, FormattedEntityIdRowFilter filter,
