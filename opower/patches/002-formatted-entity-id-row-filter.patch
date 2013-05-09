@@ -166,7 +166,7 @@ index 0000000..3e97096
 +    // are skipped over, and null components match any value.
 +    // ISO-8859-1 is used so that numerals map to valid characters
 +    // see http://stackoverflow.com/a/1387184
-+    StringBuilder regex = new StringBuilder("^"); // ^ matches the beginning of the string
++    StringBuilder regex = new StringBuilder("(?s)^"); // ^ matches the beginning of the string
 +    if (null != mRowKeyFormat.getSalt()) {
 +      if (mRowKeyFormat.getSalt().getHashSize() > 0) {
 +        // match any character exactly 'hash size' number of times
@@ -347,7 +347,7 @@ new file mode 100644
 index 0000000..0606d0f
 --- /dev/null
 +++ b/kiji-schema/src/test/java/org/kiji/schema/filter/TestFormattedEntityIdRowFilter.java
-@@ -0,0 +1,374 @@
+@@ -0,0 +1,403 @@
 +/**
 + * (c) Copyright 2013 WibiData, Inc.
 + *
@@ -375,6 +375,10 @@ index 0000000..0606d0f
 +
 +import static org.kiji.schema.avro.ComponentType.*;
 +
++import java.io.ByteArrayInputStream;
++import java.io.ByteArrayOutputStream;
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
 +import java.lang.reflect.Field;
 +import java.util.List;
 +import java.util.Random;
@@ -683,6 +687,31 @@ index 0000000..0606d0f
 +    runTest(mRowKeyFormat, filter, mFactory, INCLUDE, 100, null, null);
 +    runTest(mRowKeyFormat, filter, mFactory, EXCLUDE, 0, 2000L, "value");
 +    runTest(mRowKeyFormat, filter, mFactory, EXCLUDE, 0, null, null);
++  }
++
++  @Test
++  public void testLatinNewlineCharacterInclusion() throws Exception {
++
++    RowKeyFormat2 rowKeyFormat = createRowKeyFormat(1, INTEGER, LONG);
++    EntityIdFactory factory = EntityIdFactory.getFactory(rowKeyFormat);
++
++    // Create and serialize a filter
++    ByteArrayOutputStream baos = new ByteArrayOutputStream();
++    DataOutputStream dos = new DataOutputStream(baos);
++    FormattedEntityIdRowFilter filter = createFilter(rowKeyFormat, 10);
++    filter.toHBaseFilter(null).write(dos);
++
++    // Deserialize the filter
++    ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
++    DataInputStream dis = new DataInputStream(bais);
++    Filter deserializedFilter = new RowFilter();
++    deserializedFilter.readFields(dis);
++
++    // Filter an entity with the deserialized filter
++    EntityId entityId = factory.getEntityId(10, 10L);
++    byte[] hbaseKey = entityId.getHBaseRowKey();
++    boolean filtered = deserializedFilter.filterRowKey(hbaseKey, 0, hbaseKey.length);
++    assertEquals(INCLUDE, filtered);
 +  }
 +
 +  private void runTest(RowKeyFormat2 rowKeyFormat, FormattedEntityIdRowFilter filter,
