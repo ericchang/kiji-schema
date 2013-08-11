@@ -1,0 +1,130 @@
+diff --git a/build-resources/pom.xml b/build-resources/pom.xml
+index 8a487e8..1052523 100644
+--- a/build-resources/pom.xml
++++ b/build-resources/pom.xml
+@@ -25,7 +25,7 @@
+   <parent>
+     <groupId>org.kiji.schema</groupId>
+     <artifactId>kiji-schema-root</artifactId>
+-    <version>1.2.0</version>
++    <version>1.2.0-opower-1</version>
+     <relativePath>..</relativePath>
+   </parent>
+ 
+diff --git a/cdh41mr1-bridge/pom.xml b/cdh41mr1-bridge/pom.xml
+index 243b130..89c5232 100644
+--- a/cdh41mr1-bridge/pom.xml
++++ b/cdh41mr1-bridge/pom.xml
+@@ -25,7 +25,7 @@
+   <parent>
+     <groupId>org.kiji.schema</groupId>
+     <artifactId>kiji-schema-root</artifactId>
+-    <version>1.2.0</version>
++    <version>1.2.0-opower-1</version>
+     <relativePath>..</relativePath>
+   </parent>
+ 
+diff --git a/cdh42mr1-bridge/pom.xml b/cdh42mr1-bridge/pom.xml
+index 1685fd5..ea5937f 100644
+--- a/cdh42mr1-bridge/pom.xml
++++ b/cdh42mr1-bridge/pom.xml
+@@ -25,7 +25,7 @@
+   <parent>
+     <groupId>org.kiji.schema</groupId>
+     <artifactId>kiji-schema-root</artifactId>
+-    <version>1.2.0</version>
++    <version>1.2.0-opower-1</version>
+     <relativePath>..</relativePath>
+   </parent>
+ 
+diff --git a/hadoop1-hbase92-bridge/pom.xml b/hadoop1-hbase92-bridge/pom.xml
+index 6c4587f..16733ee 100644
+--- a/hadoop1-hbase92-bridge/pom.xml
++++ b/hadoop1-hbase92-bridge/pom.xml
+@@ -25,7 +25,7 @@
+   <parent>
+     <groupId>org.kiji.schema</groupId>
+     <artifactId>kiji-schema-root</artifactId>
+-    <version>1.2.0</version>
++    <version>1.2.0-opower-1</version>
+     <relativePath>..</relativePath>
+   </parent>
+ 
+diff --git a/hadoop1-hbase94-bridge/pom.xml b/hadoop1-hbase94-bridge/pom.xml
+index 104a455..f95f3d3 100644
+--- a/hadoop1-hbase94-bridge/pom.xml
++++ b/hadoop1-hbase94-bridge/pom.xml
+@@ -25,7 +25,7 @@
+   <parent>
+     <groupId>org.kiji.schema</groupId>
+     <artifactId>kiji-schema-root</artifactId>
+-    <version>1.2.0</version>
++    <version>1.2.0-opower-1</version>
+     <relativePath>..</relativePath>
+   </parent>
+ 
+diff --git a/kiji-schema-archetype/pom.xml b/kiji-schema-archetype/pom.xml
+index 673fc09..416a767 100644
+--- a/kiji-schema-archetype/pom.xml
++++ b/kiji-schema-archetype/pom.xml
+@@ -26,7 +26,7 @@
+   <parent>
+     <groupId>org.kiji.schema</groupId>
+     <artifactId>kiji-schema-root</artifactId>
+-    <version>1.2.0</version>
++    <version>1.2.0-opower-1</version>
+     <relativePath>..</relativePath>
+   </parent>
+ 
+diff --git a/kiji-schema-extras/pom.xml b/kiji-schema-extras/pom.xml
+index 8e30c94..edc72e7 100644
+--- a/kiji-schema-extras/pom.xml
++++ b/kiji-schema-extras/pom.xml
+@@ -25,7 +25,7 @@
+   <parent>
+     <groupId>org.kiji.schema</groupId>
+     <artifactId>kiji-schema-root</artifactId>
+-    <version>1.2.0</version>
++    <version>1.2.0-opower-1</version>
+     <relativePath>..</relativePath>
+   </parent>
+ 
+diff --git a/kiji-schema/pom.xml b/kiji-schema/pom.xml
+index fb99a99..1e46086 100644
+--- a/kiji-schema/pom.xml
++++ b/kiji-schema/pom.xml
+@@ -25,7 +25,7 @@
+   <parent>
+     <groupId>org.kiji.schema</groupId>
+     <artifactId>kiji-schema-root</artifactId>
+-    <version>1.2.0</version>
++    <version>1.2.0-opower-1</version>
+     <relativePath>..</relativePath>
+   </parent>
+ 
+diff --git a/platform-api/pom.xml b/platform-api/pom.xml
+index 44d73f0..faafe83 100644
+--- a/platform-api/pom.xml
++++ b/platform-api/pom.xml
+@@ -25,7 +25,7 @@
+   <parent>
+     <groupId>org.kiji.schema</groupId>
+     <artifactId>kiji-schema-root</artifactId>
+-    <version>1.2.0</version>
++    <version>1.2.0-opower-1</version>
+     <relativePath>..</relativePath>
+   </parent>
+ 
+diff --git a/pom.xml b/pom.xml
+index 5d23fd4..977d411 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -21,7 +21,7 @@
+ 
+   <groupId>org.kiji.schema</groupId>
+   <artifactId>kiji-schema-root</artifactId>
+-  <version>1.2.0</version>
++  <version>1.2.0-opower-1</version>
+   <packaging>pom</packaging>
+ 
+   <parent>
